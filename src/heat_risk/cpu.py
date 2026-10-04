@@ -38,7 +38,8 @@ def longest_runs(mask: npt.NDArray[np.bool_], axis: int) -> npt.NDArray[np.int32
     c = np.cumsum(m, axis=-1, dtype=np.int64)
     # Running length = cumulative count minus the count at the most recent False day.
     reset = np.maximum.accumulate(np.where(m, 0, c), axis=-1)
-    return (c - reset).max(axis=-1).astype(np.int32)
+    runs: npt.NDArray[np.int32] = (c - reset).max(axis=-1).astype(np.int32)
+    return runs
 
 
 def evaluate(tmax: Array, tmin: Array, rh: Array, tx90: Array, tx95: Array) -> HazardResult:
