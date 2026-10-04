@@ -32,10 +32,44 @@ def test_default_options_disable_fma() -> None:
     assert gpu_cuda.DEFAULT_OPTIONS.fma is False and gpu_cuda.DEFAULT_OPTIONS.arch == "sm_75"
 
 
-def _ptx(fma: bool) -> str:
+def _nvrtc_flags(fma: bool) -> list[bytes]:
     opts = replace(gpu_cuda.DEFAULT_OPTIONS, arch="compute_75", fma=fma)
-    code = gpu_cuda.compile_kernel(opts, "ptx").code
-    return code.decode() if isinstance(code, bytes) else str(code)
+    flags: list[bytes] = opts.to_program_options().as_bytes("nvrtc", "ptx")
+    return flags
+
+
+def _ptx(fma: bool) -> str:
+    """PTX from NVRTC with exactly the flags cuda.core would pass.
+
+    cuda.core's own PTX path checks the driver version first, which needs libcuda; the CI runner
+    has no driver (CI run 37214057672). Calling NVRTC directly needs no driver.
+    """
+    from cuda.bindings import nvrtc
+
+    def check(result: tuple) -> tuple:  # type: ignore[type-arg]
+        if result[0] != nvrtc.nvrtcResult.NVRTC_SUCCESS:
+            raise RuntimeError(f"NVRTC error {result[0]}")
+        return result
+
+    src = gpu_cuda.kernel_source().encode()
+    _, prog = check(nvrtc.nvrtcCreateProgram(src, b"heat_hazards.cu", 0, [], []))
+    flags = _nvrtc_flags(fma)
+    err = nvrtc.nvrtcCompileProgram(prog, len(flags), flags)[0]
+    if err != nvrtc.nvrtcResult.NVRTC_SUCCESS:
+        _, n = nvrtc.nvrtcGetProgramLogSize(prog)
+        log = b" " * n
+        nvrtc.nvrtcGetProgramLog(prog, log)
+        raise RuntimeError(log.decode(errors="replace"))
+    _, size = check(nvrtc.nvrtcGetPTXSize(prog))
+    buf = b" " * size
+    check(nvrtc.nvrtcGetPTX(prog, buf))
+    return buf.decode(errors="replace")
+
+
+@pytest.mark.nvrtc
+def test_cuda_core_translates_fma_false_to_fmad_flag() -> None:
+    assert b"--fmad=false" in _nvrtc_flags(fma=False)
+    assert not any(f.startswith(b"--use_fast_math") for f in _nvrtc_flags(fma=False))
 
 
 @pytest.mark.nvrtc
