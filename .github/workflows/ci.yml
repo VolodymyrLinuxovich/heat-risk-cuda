@@ -22,3 +22,20 @@ jobs:
       - run: ruff check
       - run: mypy src
       - run: pytest -m "not gpu" -rs
+
+  nvrtc:
+    # Compiles the CUDA kernel with NVRTC on a runner with no GPU. Fails (never skips) if
+    # cuda.core cannot be imported here.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install CPU-only torch
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install package with gpu extra
+        run: pip install -e ".[dev,gpu]"
+      - run: pytest -m nvrtc -rs -v
+        env:
+          HEAT_RISK_REQUIRE_NVRTC: "1"

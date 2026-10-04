@@ -33,7 +33,10 @@ heat_risk = ["kernels/*.cu"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tests"]
-markers = ["gpu: needs a CUDA device (skipped when none is present)"]
+markers = [
+    "gpu: needs a CUDA device (skipped when none is present)",
+    "nvrtc: needs cuda-core and NVRTC but no GPU (skipped unless installed)",
+]
 
 [tool.ruff]
 line-length = 100
