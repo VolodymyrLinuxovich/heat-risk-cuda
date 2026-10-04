@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "heat-risk-cuda"
+version = "0.1.0"
+description = "Heat hazard counts over [scenario, location, day] arrays: NumPy reference, PyTorch baseline, and a custom CUDA kernel via cuda.core."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26", "torch>=2.3"]
+
+[project.optional-dependencies]
+# Linux/Windows only: cuda-core publishes no macOS wheels.
+gpu = ["cuda-core[cu12]==1.2.1"]
+dev = [
+    "pytest>=8",
+    "hypothesis>=6",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "nbconvert>=7",
+    "nbformat>=5",
+    "ipykernel>=6",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+heat_risk = ["kernels/*.cu"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["gpu: needs a CUDA device (skipped when none is present)"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "NPY"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["cuda.*"]
+ignore_missing_imports = true
