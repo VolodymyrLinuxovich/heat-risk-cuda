@@ -10,13 +10,15 @@ implementations of the same specification:
 | Name | What it is | Custom kernel? |
 |---|---|---|
 | `cpu` | NumPy reference implementation | no |
-| `gpu_torch` | Ordinary PyTorch library ops | no, a library ops baseline only |
+| `gpu_torch` | Ordinary PyTorch library ops | no: library ops baseline, not a custom kernel |
 | `gpu_cuda` | CUDA C++ kernel compiled at runtime with NVIDIA `cuda.core` (NVRTC) | yes |
 
 ## Status and honesty
 
-- Work in progress. The implementations above are being added one commit at a time; see
-  STATUS.md once it exists.
+- Work in progress. Implemented so far: `cpu` and `gpu_torch`, tested on CPU only. `gpu_cuda`
+  is not written yet.
+- The hazard definitions are in [docs/hazards.md](docs/hazards.md). They are project
+  simplifications, not ETCCDI indices.
 - **Nothing has been measured on a GPU yet.** No speedup is claimed until it is measured, and
   any benchmark table in this README will be generated from JSON files written by real GPU runs.
 - All data is synthetic (seeded generator).
