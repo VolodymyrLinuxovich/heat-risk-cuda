@@ -16,7 +16,8 @@ implementations of the same specification:
 ## Status and honesty
 
 - All three implementations are written and tested. On a Kaggle Tesla T4 the custom kernel
-  passed all GPU parity tests (61 passed). Timings are not measured yet. See STATUS.md.
+  passed all GPU parity tests (61 passed) and was benchmarked; see the results below and
+  STATUS.md.
 - The hazard definitions are in [docs/hazards.md](docs/hazards.md). They are project
   simplifications, not ETCCDI indices.
 - **Nothing has been measured on a GPU yet.** No speedup is claimed until it is measured, and
@@ -31,10 +32,13 @@ implementations of the same specification:
 | `gpu_torch` matches `cpu` | verified on CPU tensors and on a Kaggle Tesla T4 |
 | `gpu_cuda` kernel compiles for sm_75, float32 and float64, no `fma` in the PTX | verified in Linux CI with NVRTC, no GPU |
 | `gpu_cuda` produces correct results | verified on a Kaggle Tesla T4: all parity and edge-case tests pass, float32 and float64 |
-| Any timing or speedup | **not yet measured** |
+| Timings on a Tesla T4 | measured once (one Kaggle session, 10 reps, float32); table below |
 
-No speedup is claimed until it is measured. When it is, compute-only, layout prep, transfers and
-end-to-end time are reported separately, and a GPU result slower than `cpu` is reported as data.
+Only what the table shows is claimed. Compute-only, layout prep, transfers and end-to-end time
+are reported separately, and a GPU result slower than `cpu` would be reported as data. Not
+measured: other GPUs, float64 timings, run-to-run variation across sessions, and an optimised
+multi-threaded CPU baseline (`cpu` is a straightforward NumPy reference, so speedups against it
+overstate what a tuned CPU implementation would show).
 
 ## How to reproduce on Kaggle
 
@@ -55,8 +59,39 @@ different thing from NVIDIA Triton Inference Server, which is also not used.
 
 ## Benchmark results
 
+![Timings on a Tesla T4](docs/img/timings.png)
+
+What the one T4 run shows, read straight from the JSON:
+
+- Every GPU result matched the `cpu` reference exactly.
+- At 16×4000×365, the custom kernel's compute was 1.38 ms against 116.6 ms for the PyTorch
+  library ops baseline (about 85×). End to end, including transfers and the layout transpose,
+  the gap shrinks to about 2.4× (57.7 ms against 140.6 ms).
+- At the largest size (32×16000×365, 187 million cells) `gpu_torch` ran out of GPU memory, as
+  estimated in [docs/design.md](docs/design.md); `gpu_cuda` finished in 457.6 ms end to end.
+- There, kernel compute is 2.3% of the end-to-end time: the day-major transpose (57%) and the
+  host-to-device copy (40%) dominate. That is the next thing to optimise.
+
+
 <!-- bench-table:start -->
-**Not yet measured.** No benchmark has been run on a GPU yet, so there are no numbers here. No speedup is claimed until it is measured.
+Generated from `bench/results/*.json` by `python -m bench.make_table`. Times are medians in milliseconds. A GPU result slower than `cpu` is reported as measured. No speedup is claimed beyond these measurements.
+
+**Tesla T4** (device 0, driver 580.178.04), torch 2.11.0+cu128, cuda-core 1.2.1, float32, fma=off, 10 reps, 2026-10-04T16:32:27Z, `20261004T163227Z_tesla-t4_dev0.json`
+
+| impl | size (S×L×D) | h2d | layout_prep | compute | d2h | end_to_end | matches cpu |
+|---|---|---|---|---|---|---|---|
+| cpu | 1×1000×365 |  |  | 55.446 |  | 55.446 | yes |
+| gpu_torch | 1×1000×365 | 0.397 |  | 2.047 | 0.094 | 2.389 | yes |
+| gpu_cuda | 1×1000×365 | 0.396 | 0.160 | 0.467 | 0.103 | 0.966 | yes |
+| cpu | 4×1000×365 |  |  | 249.319 |  | 249.319 | yes |
+| gpu_torch | 4×1000×365 | 1.513 |  | 7.948 | 0.126 | 9.559 | yes |
+| gpu_cuda | 4×1000×365 | 1.514 | 0.338 | 0.396 | 0.126 | 2.221 | yes |
+| cpu | 16×4000×365 |  |  | 5164.138 |  | 5164.138 | yes |
+| gpu_torch | 16×4000×365 | 23.160 |  | 116.636 | 0.701 | 140.553 | yes |
+| gpu_cuda | 16×4000×365 | 23.156 | 32.567 | 1.378 | 0.694 | 57.659 | yes |
+| cpu | 32×16000×365 |  |  | 40259.846 |  | 40259.846 | yes |
+| gpu_torch | 32×16000×365 | CUDA out of memory |  |  |  |  | n/a |
+| gpu_cuda | 32×16000×365 | 182.176 | 261.127 | 10.421 | 3.541 | 457.571 | yes |
 <!-- bench-table:end -->
 
 ## Development
@@ -69,6 +104,15 @@ ruff check && mypy src && pytest -m "not gpu"
 
 The `gpu` extra (`cuda-core[cu12]`) installs only on Linux and Windows.
 
+## Screenshots from the Kaggle run
+
+Outputs are copied from the log of the Kaggle run (version 2, private notebook) and rendered
+locally; only the notebook is shown.
+
+| Environment | Tests | Benchmark |
+|---|---|---|
+| ![Two Tesla T4s](docs/img/kaggle_t4_environment.png) | ![61 GPU tests passed](docs/img/kaggle_t4_tests.png) | ![Benchmark output](docs/img/kaggle_t4_benchmark.png) |
+
 ## Acknowledgments
 
 - **Heat index:** the US National Weather Service heat index algorithm (the Rothfusz regression
@@ -79,7 +123,7 @@ The `gpu` extra (`cuda-core[cu12]`) installs only on Linux and Windows.
 - **Tooling:** NumPy, PyTorch, Hypothesis, pytest, ruff and mypy. The custom kernel (in progress)
   uses NVIDIA's open-source CUDA Python tooling (`cuda.core`). This is an independent project;
   NVIDIA did not create, endorse, or sponsor it.
-- **Compute:** GitHub Actions runs the CPU test suite. GPU measurements are planned on Kaggle's free
-  T4 notebooks and have not been run yet.
+- **Compute:** GitHub Actions runs the CPU test suite; GPU tests and measurements ran on Kaggle's free
+  T4 notebooks.
 - Developed with AI coding assistance; the author specified the design, reviewed the code, and
   runs all GPU measurements.

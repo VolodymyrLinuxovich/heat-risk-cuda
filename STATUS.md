@@ -30,12 +30,25 @@ Private Kaggle notebook run of `notebooks/kaggle_heat_risk_cuda.ipynb` on `cuda:
 So the custom kernel gives exactly the cpu reference's counts and runs on a T4, in float32 and
 float64.
 
-## Not yet measured
+The first run's benchmark was killed by the notebook's 120 s shell timeout. A second run
+(version 2, same day) fixed that and also re-ran the full suite: 139 CPU passed, 61 GPU and NVRTC
+passed, including the new explicit `Device.create_stream` wrapping in `gpu_cuda`.
 
-The benchmark did not run in that session: the notebook's shell helper had a 120 s timeout,
-which killed `bench.run`. Fixed (no timeout for the benchmark cell); see the next run.
+## Measured: one benchmark run on a Tesla T4
 
-## Next: on Kaggle (GPU T4 x2, Internet on)
+`bench/results/20261004T163227Z_tesla-t4_dev0.json`: cuda:0, float32, fma off, 10 reps after 2
+warmups, medians. All GPU results matched `cpu`. `gpu_torch` ran out of memory at 32×16000×365
+(estimate in docs/design.md: about 21 GB needed, 15 GB available); this is recorded in the JSON.
+
+`bench/plot.py` crashed in that run on the out-of-memory row (visible in the notebook log). It
+is fixed; `docs/img/timings.png` was then generated locally from the same JSON.
+
+## Not measured
+
+Other GPUs, float64 timings, variation across sessions, the second T4, and an optimised CPU
+baseline.
+
+## Re-running on Kaggle (GPU T4 x2, Internet on)
 
 Either run `notebooks/kaggle_heat_risk_cuda.ipynb` top to bottom, or in a Kaggle terminal:
 
@@ -51,5 +64,5 @@ python -m bench.make_table && python -m bench.plot
 ```
 
 Then copy `bench/results/*.json` into the repo, regenerate the README table with
-`python -m bench.make_table`, commit, and update this file with what passed, what failed, and
-the GPU name, driver and package versions recorded in the JSON.
+`python -m bench.make_table` and the plot with `python -m bench.plot --out docs/img/timings.png`,
+and commit them with the JSON.

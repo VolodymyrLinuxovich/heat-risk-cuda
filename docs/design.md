@@ -64,19 +64,29 @@ transpose before it, the copy back after it) without extra synchronization.
 
 ## Side note: GPU memory at the largest benchmark size
 
-These are estimates from reading the code, not measurements. The largest benchmark size is
-32 × 16,000 × 365 = 186.9 million cells, in float32.
+The figures below are estimates from reading the code. The outcome was then measured: on a
+Kaggle Tesla T4, `gpu_torch` ran out of memory at this size and `gpu_cuda` did not (see
+STATUS.md). The largest benchmark size is 32 × 16,000 × 365 = 186.9 million cells, in float32.
 
 | Implementation | What is live on the GPU at its peak | Estimate |
 |---|---|---|
 | `gpu_cuda` | 3 inputs (0.75 GB each) + 3 day-major copies | about 4.5 GB |
 | `gpu_torch` | 3 inputs (2.2 GB) + run-length step: bool masks (0.75 GB), `cumsum` int32 (3.0 GB), `zeros_like` (3.0 GB), `where` (3.0 GB), `cummax` values (3.0 GB) and its int64 indices (6.0 GB) | about 21 GB |
 
-A Tesla T4 has 15 GB usable, so `gpu_torch` is expected to run out of memory at that size while
-the custom kernel is not. The kernel keeps its per-hazard counters in registers; the library
+A Tesla T4 has 15 GB usable, so `gpu_torch` runs out of memory at that size while the custom
+kernel does not. The kernel keeps its per-hazard counters in registers; the library
 ops version materialises every intermediate as a full-size tensor. The benchmark records an
 out-of-memory result as `error` instead of crashing, so the table shows it. `batch.py` is the way
 to run `gpu_torch` on inputs this large.
+
+## Side note: where the end-to-end time goes
+
+At the largest size on the T4, kernel compute was 10.4 ms of 457.6 ms end to end. The
+day-major transpose took 261 ms and the host-to-device copy 182 ms. The coalesced layout makes the
+kernel fast, but producing that layout with a separate PyTorch copy costs about 25 times the
+kernel itself. Options, none implemented yet: generate or store data day-major so no transpose is
+needed, transpose on the host while copying, or have the kernel read the original layout through
+shared-memory tiles.
 
 ## Kaggle environment notes (first run, 2026-10-04)
 

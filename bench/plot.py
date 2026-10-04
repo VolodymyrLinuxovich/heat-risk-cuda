@@ -27,15 +27,34 @@ def main(argv: list[str] | None = None) -> int:
         for rec in records:
             for impl in ("cpu", "gpu_torch", "gpu_cuda"):
                 rows = sorted(
-                    (r for r in rec["results"] if r["impl"] == impl), key=lambda r: r["cells"]
+                    (
+                        r
+                        for r in rec["results"]
+                        if r["impl"] == impl and not r.get("error")  # e.g. out of memory
+                    ),
+                    key=lambda r: r["cells"],
                 )
+                where = "host CPU" if impl == "cpu" else rec["gpu"]["name"]
                 if rows:
                     ax.plot(
                         [r["cells"] for r in rows],
                         [r["stages_ms"][stage] for r in rows],
                         marker="o",
-                        label=f"{impl} ({rec['gpu']['name']})",
+                        label=f"{impl} ({where})",
                     )
+                for r in rec["results"]:
+                    if r["impl"] == impl and r.get("error"):
+                        ax.axvline(r["cells"], color="0.6", linestyle=":", linewidth=1)
+                        ax.annotate(
+                            f"{impl}: {r['error'].split(':')[0].lower()}",
+                            (r["cells"], 0.02),
+                            xycoords=("data", "axes fraction"),
+                            rotation=90,
+                            fontsize=7,
+                            color="0.35",
+                            ha="right",
+                            va="bottom",
+                        )
         ax.set_xscale("log")
         ax.set_yscale("log")
         ax.set_xlabel("cells (scenario × location × day)")

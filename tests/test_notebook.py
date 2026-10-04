@@ -32,6 +32,8 @@ def test_notebook_runs_on_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
     if torch.cuda.is_available():
         pytest.skip("smoke test is for CPU machines; on a GPU run the notebook itself")
     readme_before = README.read_text()
+    results = NOTEBOOK.parent.parent / "bench" / "results"
+    json_before = sorted(results.glob("*.json"))
     monkeypatch.setenv("HEAT_RISK_NOTEBOOK_SMOKE", "1")
     nb = nbformat.read(NOTEBOOK, as_version=4)
     try:
@@ -46,6 +48,6 @@ def test_notebook_runs_on_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "torch.cuda: False" in text
     assert "skipped: no CUDA device" in text
     assert "dry run: results not written" in text
-    assert not list((NOTEBOOK.parent.parent / "bench" / "results").glob("*.json"))
-    # make_table may rewrite README; with no results it must be unchanged.
+    assert sorted(results.glob("*.json")) == json_before  # the smoke run writes no results
+    # make_table rewrites README from the same JSON, so it must come out unchanged.
     assert README.read_text() == readme_before

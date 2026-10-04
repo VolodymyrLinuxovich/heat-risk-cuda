@@ -1,0 +1,207 @@
+{
+  "config": {
+    "block_size": 128,
+    "data": "synthetic, avoid_threshold_band applied",
+    "dtype": "float32",
+    "fma": false,
+    "reps": 10,
+    "seed": 0,
+    "statistic": "median",
+    "warmup": 2
+  },
+  "created_utc": "2026-10-04T16:32:27Z",
+  "dry_run": false,
+  "git_commit": "687fb4c985326794ed799d3209d4a0304635258b",
+  "gpu": {
+    "compute_capability": "7.5",
+    "device_count": 2,
+    "device_index": 0,
+    "driver": "580.178.04",
+    "name": "Tesla T4"
+  },
+  "results": [
+    {
+      "cells": 365000,
+      "custom_kernel": false,
+      "days": 365,
+      "impl": "cpu",
+      "locations": 1000,
+      "matches_cpu": true,
+      "scenarios": 1,
+      "stages_ms": {
+        "compute": 55.44559599999843,
+        "end_to_end": 55.44559599999843
+      }
+    },
+    {
+      "cells": 365000,
+      "custom_kernel": false,
+      "days": 365,
+      "impl": "gpu_torch",
+      "locations": 1000,
+      "matches_cpu": true,
+      "scenarios": 1,
+      "stages_ms": {
+        "compute": 2.0469279289245605,
+        "d2h": 0.09372800216078758,
+        "end_to_end": 2.3894240856170654,
+        "h2d": 0.3970720022916794
+      }
+    },
+    {
+      "cells": 365000,
+      "custom_kernel": true,
+      "days": 365,
+      "impl": "gpu_cuda",
+      "locations": 1000,
+      "matches_cpu": true,
+      "scenarios": 1,
+      "stages_ms": {
+        "compute": 0.4672960042953491,
+        "d2h": 0.10331200063228607,
+        "end_to_end": 0.9664320051670074,
+        "h2d": 0.39580801129341125,
+        "layout_prep": 0.16012800484895706
+      }
+    },
+    {
+      "cells": 1460000,
+      "custom_kernel": false,
+      "days": 365,
+      "impl": "cpu",
+      "locations": 1000,
+      "matches_cpu": true,
+      "scenarios": 4,
+      "stages_ms": {
+        "compute": 249.31939900000089,
+        "end_to_end": 249.31939900000089
+      }
+    },
+    {
+      "cells": 1460000,
+      "custom_kernel": false,
+      "days": 365,
+      "impl": "gpu_torch",
+      "locations": 1000,
+      "matches_cpu": true,
+      "scenarios": 4,
+      "stages_ms": {
+        "compute": 7.948384046554565,
+        "d2h": 0.12643199414014816,
+        "end_to_end": 9.558864116668701,
+        "h2d": 1.5134239792823792
+      }
+    },
+    {
+      "cells": 1460000,
+      "custom_kernel": true,
+      "days": 365,
+      "impl": "gpu_cuda",
+      "locations": 1000,
+      "matches_cpu": true,
+      "scenarios": 4,
+      "stages_ms": {
+        "compute": 0.3964959979057312,
+        "d2h": 0.12640000134706497,
+        "end_to_end": 2.220703959465027,
+        "h2d": 1.5143840312957764,
+        "layout_prep": 0.3380640000104904
+      }
+    },
+    {
+      "cells": 23360000,
+      "custom_kernel": false,
+      "days": 365,
+      "impl": "cpu",
+      "locations": 4000,
+      "matches_cpu": true,
+      "scenarios": 16,
+      "stages_ms": {
+        "compute": 5164.138035500002,
+        "end_to_end": 5164.138035500002
+      }
+    },
+    {
+      "cells": 23360000,
+      "custom_kernel": false,
+      "days": 365,
+      "impl": "gpu_torch",
+      "locations": 4000,
+      "matches_cpu": true,
+      "scenarios": 16,
+      "stages_ms": {
+        "compute": 116.63569641113281,
+        "d2h": 0.7008160054683685,
+        "end_to_end": 140.5525131225586,
+        "h2d": 23.160080909729004
+      }
+    },
+    {
+      "cells": 23360000,
+      "custom_kernel": true,
+      "days": 365,
+      "impl": "gpu_cuda",
+      "locations": 4000,
+      "matches_cpu": true,
+      "scenarios": 16,
+      "stages_ms": {
+        "compute": 1.3775359988212585,
+        "d2h": 0.69377601146698,
+        "end_to_end": 57.659135818481445,
+        "h2d": 23.15555191040039,
+        "layout_prep": 32.56710433959961
+      }
+    },
+    {
+      "cells": 186880000,
+      "custom_kernel": false,
+      "days": 365,
+      "impl": "cpu",
+      "locations": 16000,
+      "matches_cpu": true,
+      "scenarios": 32,
+      "stages_ms": {
+        "compute": 40259.84645,
+        "end_to_end": 40259.84645
+      }
+    },
+    {
+      "cells": 186880000,
+      "custom_kernel": false,
+      "days": 365,
+      "error": "CUDA out of memory: CUDA out of memory. Tried to allocate 5.57 GiB. GPU 0 has a total capacity of 14.56 GiB of which 3.28 GiB is free. Including non-PyTorch memory, this process has 11.27 GiB memory in use. Of the allocated memory 11.15 GiB is allocated by PyTorch, and 10.50 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)",
+      "impl": "gpu_torch",
+      "locations": 16000,
+      "matches_cpu": null,
+      "scenarios": 32,
+      "stages_ms": null
+    },
+    {
+      "cells": 186880000,
+      "custom_kernel": true,
+      "days": 365,
+      "impl": "gpu_cuda",
+      "locations": 16000,
+      "matches_cpu": true,
+      "scenarios": 32,
+      "stages_ms": {
+        "compute": 10.421056270599365,
+        "d2h": 3.5408960580825806,
+        "end_to_end": 457.5712432861328,
+        "h2d": 182.1758270263672,
+        "layout_prep": 261.1268310546875
+      }
+    }
+  ],
+  "schema": 1,
+  "software": {
+    "cuda_bindings": "12.9.7",
+    "cuda_core": "1.2.1",
+    "heat_risk": "0.1.0",
+    "numpy": "2.1.3",
+    "platform": "Linux-6.18.48+-x86_64-with-glibc2.39",
+    "python": "3.13.15",
+    "torch": "2.11.0+cu128",
+    "torch_cuda": "12.8"
+  }
+}

@@ -132,3 +132,15 @@ def test_out_of_memory_is_recorded_not_hidden(monkeypatch: pytest.MonkeyPatch) -
     assert gt["stages_ms"] is None and gt["matches_cpu"] is None
     table = make_table.render([{**rec, "gpu": {"name": "x", "device_index": 0}, "_file": "f"}])
     assert "| gpu_torch | 1×3×5 | CUDA out of memory |" in table
+
+
+def test_plot_skips_error_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("matplotlib")
+    from bench import plot
+
+    rec = json.loads(FIXTURE.read_text())
+    rec["results"].append({**rec["results"][1], "stages_ms": None, "error": "CUDA out of memory"})
+    rec["_file"] = "f"
+    monkeypatch.setattr(plot, "load_records", lambda: [rec])
+    out = tmp_path / "p.png"
+    assert plot.main(["--out", str(out)]) == 0 and out.exists()
