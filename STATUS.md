@@ -34,19 +34,31 @@ The first run's benchmark was killed by the notebook's 120 s shell timeout. A se
 (version 2, same day) fixed that and also re-ran the full suite: 139 CPU passed, 61 GPU and NVRTC
 passed, including the new explicit `Device.create_stream` wrapping in `gpu_cuda`.
 
-## Measured: one benchmark run on a Tesla T4
+## Measured: two benchmark runs on a Tesla T4
 
-`bench/results/20261004T163227Z_tesla-t4_dev0.json`: cuda:0, float32, fma off, 10 reps after 2
-warmups, medians. All GPU results matched `cpu`. `gpu_torch` ran out of memory at 32×16000×365
-(estimate in docs/design.md: about 21 GB needed, 15 GB available); this is recorded in the JSON.
+Both runs: cuda:0, float32, fma off, 10 reps after 2 warmups, medians. All GPU results matched
+`cpu` in both.
 
-`bench/plot.py` crashed in that run on the out-of-memory row (visible in the notebook log). It
-is fixed; `docs/img/timings.png` was then generated locally from the same JSON.
+- `bench/results/20261004T163227Z_tesla-t4_dev0.json` (run version 2): `gpu_torch` ran out of
+  memory at 32×16000×365 (estimate in docs/design.md: about 21 GB needed, 15 GB available).
+  `bench/plot.py` crashed in that run on the out-of-memory row (visible in the notebook log);
+  fixed since.
+- `bench/results/20261004T173303Z_tesla-t4_dev0.json` (run version 3): adds `gpu_cuda_tiled`,
+  the shared-memory tiled kernel. 2.2× faster end to end than day-major + transpose at the two
+  largest sizes. The day-major end-to-end times repeated run version 2 within 0.1% at the
+  largest size and within about 4% at the smaller ones.
+
+Run version 3 test results on the T4: `pytest -m "not gpu"` 142 passed, 2 skipped;
+`HEAT_RISK_REQUIRE_NVRTC=1 pytest -m "gpu or nvrtc"` **171 passed**, including 80 tile-edge
+cases for the tiled kernel. The extra warnings in that CPU run are deprecation warnings from
+matplotlib's dependencies, raised by the plot test, not from this project.
+
+After that run the tiled kernel became the default `layout`; both layouts stay covered by the
+GPU tests. `docs/img/timings.png` and the screenshots were regenerated from run version 3.
 
 ## Not measured
 
-Other GPUs, float64 timings, variation across sessions, the second T4, and an optimised CPU
-baseline.
+Other GPUs, float64 timings, the second T4, and an optimised CPU baseline.
 
 ## Re-running on Kaggle (GPU T4 x2, Internet on)
 

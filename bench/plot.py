@@ -1,5 +1,7 @@
 """Plot median end_to_end and compute time against problem size from bench/results/*.json.
 
+Plots the most recent GPU run (use --all to overlay every run).
+
 Needs matplotlib (not a project dependency; it is preinstalled on Kaggle):
     python -m bench.plot --out bench/results/timings.png
 """
@@ -11,12 +13,22 @@ from pathlib import Path
 
 from bench.make_table import load_records
 
+STYLE = {
+    "cpu": ("#4c72b0", "cpu"),
+    "gpu_torch": ("#dd8452", "gpu_torch"),
+    "gpu_cuda": ("#8c8c8c", "gpu_cuda day-major + transpose"),
+    "gpu_cuda_tiled": ("#55a868", "gpu_cuda tiled"),
+}
+
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--out", type=Path, default=Path("bench/results/timings.png"))
+    p.add_argument("--all", action="store_true", help="overlay every run, not just the latest")
     a = p.parse_args(argv)
     records = load_records()
+    if records and not a.all:
+        records = [max(records, key=lambda r: r["created_utc"])]
     if not records:
         print("No GPU results in bench/results/; nothing to plot.")
         return 1
@@ -25,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     fig, axes = plt.subplots(1, 2, figsize=(11, 4), sharey=True)
     for ax, stage in zip(axes, ("compute", "end_to_end"), strict=True):
         for rec in records:
-            for impl in ("cpu", "gpu_torch", "gpu_cuda", "gpu_cuda_tiled"):
+            for impl, (color, label) in STYLE.items():
                 rows = sorted(
                     (
                         r
@@ -40,7 +52,8 @@ def main(argv: list[str] | None = None) -> int:
                         [r["cells"] for r in rows],
                         [r["stages_ms"][stage] for r in rows],
                         marker="o",
-                        label=f"{impl} ({where})",
+                        color=color,
+                        label=f"{label} ({where})",
                     )
                 for r in rec["results"]:
                     if r["impl"] == impl and r.get("error"):

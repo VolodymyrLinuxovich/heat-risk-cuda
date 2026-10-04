@@ -11,13 +11,13 @@ implementations of the same specification:
 |---|---|---|
 | `cpu` | NumPy reference implementation | no |
 | `gpu_torch` | Ordinary PyTorch library ops | no: library ops baseline, not a custom kernel |
-| `gpu_cuda` | CUDA C++ kernel compiled at runtime with NVIDIA `cuda.core` (NVRTC) | yes |
+| `gpu_cuda` | CUDA C++ kernels compiled at runtime with NVIDIA `cuda.core` (NVRTC); a shared-memory tiled kernel by default | yes |
 
 ## Status and honesty
 
-- All three implementations are written and tested. On a Kaggle Tesla T4 the custom kernel
-  passed all GPU parity tests (61 passed) and was benchmarked; see the results below and
-  STATUS.md.
+- All three implementations are written and tested. On a Kaggle Tesla T4 both custom kernels
+  passed every GPU test (171 passed in the latest run) and were benchmarked; see the results
+  below and STATUS.md.
 - The hazard definitions are in [docs/hazards.md](docs/hazards.md). They are project
   simplifications, not ETCCDI indices.
 - **Nothing has been measured on a GPU yet.** No speedup is claimed until it is measured, and
@@ -31,12 +31,12 @@ implementations of the same specification:
 | `cpu` matches hand-computed cases, NWS chart values and property tests | verified on CPU (macOS and Linux CI) |
 | `gpu_torch` matches `cpu` | verified on CPU tensors and on a Kaggle Tesla T4 |
 | `gpu_cuda` kernel compiles for sm_75, float32 and float64, no `fma` in the PTX | verified in Linux CI with NVRTC, no GPU |
-| `gpu_cuda` produces correct results | verified on a Kaggle Tesla T4: all parity and edge-case tests pass, float32 and float64 |
-| Timings on a Tesla T4 | measured once (one Kaggle session, 10 reps, float32); table below |
+| `gpu_cuda` produces correct results | verified on a Kaggle Tesla T4 for both kernels (tiled and day-major): all parity, tile-edge and edge-case tests pass, float32 and float64 |
+| Timings on a Tesla T4 | measured in two Kaggle sessions (10 reps each, float32); table below |
 
 Only what the table shows is claimed. Compute-only, layout prep, transfers and end-to-end time
 are reported separately, and a GPU result slower than `cpu` would be reported as data. Not
-measured: other GPUs, float64 timings, run-to-run variation across sessions, and an optimised
+measured: other GPUs, float64 timings, the second T4, and an optimised
 multi-threaded CPU baseline (`cpu` is a straightforward NumPy reference, so speedups against it
 overstate what a tuned CPU implementation would show).
 
@@ -61,17 +61,24 @@ different thing from NVIDIA Triton Inference Server, which is also not used.
 
 ![Timings on a Tesla T4](docs/img/timings.png)
 
-What the one T4 run shows, read straight from the JSON:
+Two Kaggle T4 runs, read straight from the JSON files (the plot shows the latest):
 
-- Every GPU result matched the `cpu` reference exactly.
-- At 16×4000×365, the custom kernel's compute was 1.38 ms against 116.6 ms for the PyTorch
-  library ops baseline (about 85×). End to end, including transfers and the layout transpose,
-  the gap shrinks to about 2.4× (57.7 ms against 140.6 ms).
-- At the largest size (32×16000×365, 187 million cells) `gpu_torch` ran out of GPU memory, as
-  estimated in [docs/design.md](docs/design.md); `gpu_cuda` finished in 457.6 ms end to end.
-- There, kernel compute is 2.3% of the end-to-end time: the day-major transpose (57%) and the
-  host-to-device copy (40%) dominate. That is the next thing to optimise.
-
+- Every GPU result in both runs matched the `cpu` reference exactly.
+- **Run 1** (version 2) found the bottleneck. At the largest size (32×16000×365, 187 million
+  cells) the day-major kernel computed in 10.4 ms, but the GPU transpose that feeds it took
+  261 ms of the 457.6 ms end to end. `gpu_torch` ran out of GPU memory at that size, as
+  estimated in [docs/design.md](docs/design.md).
+- **Run 2** (version 3) measured the fix, a shared-memory tiled kernel that reads the original
+  layout. End to end it took 208.2 ms against 457.1 ms (2.2× faster) at the largest size, and
+  26.5 ms against 57.3 ms at 16×4000×365. Its own compute is slower (22.8 ms against 10.4 ms),
+  which the removed transpose more than pays for. At the two small sizes the two are within
+  0.2 ms of each other. The tiled kernel is now the default.
+- The day-major end-to-end times repeated across the two sessions within 0.1% at the largest
+  size and within about 4% at the smaller ones.
+- At the largest size the host-to-device copy (182 ms) is now 87% of end-to-end time. That is
+  close to what PCIe 3 can move, so further gains need the data to start on the GPU.
+- Against the PyTorch library ops baseline at 16×4000×365: compute 3.06 ms against 116.7 ms,
+  end to end 26.5 ms against 140.3 ms (about 5.3×).
 
 <!-- bench-table:start -->
 Generated from `bench/results/*.json` by `python -m bench.make_table`. Times are medians in milliseconds. A GPU result slower than `cpu` is reported as measured. No speedup is claimed beyond these measurements.
@@ -92,6 +99,27 @@ Generated from `bench/results/*.json` by `python -m bench.make_table`. Times are
 | cpu | 32×16000×365 |  |  | 40259.846 |  | 40259.846 | yes |
 | gpu_torch | 32×16000×365 | CUDA out of memory |  |  |  |  | n/a |
 | gpu_cuda | 32×16000×365 | 182.176 | 261.127 | 10.421 | 3.541 | 457.571 | yes |
+
+**Tesla T4** (device 0, driver 580.178.04), torch 2.11.0+cu128, cuda-core 1.2.1, float32, fma=off, 10 reps, 2026-10-04T17:33:03Z, `20261004T173303Z_tesla-t4_dev0.json`
+
+| impl | size (S×L×D) | h2d | layout_prep | compute | d2h | end_to_end | matches cpu |
+|---|---|---|---|---|---|---|---|
+| cpu | 1×1000×365 |  |  | 55.924 |  | 55.924 | yes |
+| gpu_torch | 1×1000×365 | 0.392 |  | 1.983 | 0.102 | 2.397 | yes |
+| gpu_cuda | 1×1000×365 | 0.390 | 0.155 | 0.451 | 0.088 | 0.958 | yes |
+| gpu_cuda_tiled | 1×1000×365 | 0.392 |  | 0.550 | 0.093 | 0.933 | yes |
+| cpu | 4×1000×365 |  |  | 231.068 |  | 231.068 | yes |
+| gpu_torch | 4×1000×365 | 1.502 |  | 7.965 | 0.136 | 9.574 | yes |
+| gpu_cuda | 4×1000×365 | 1.493 | 0.314 | 0.352 | 0.112 | 2.129 | yes |
+| gpu_cuda_tiled | 4×1000×365 | 1.489 |  | 0.422 | 0.111 | 1.939 | yes |
+| cpu | 16×4000×365 |  |  | 4957.602 |  | 4957.602 | yes |
+| gpu_torch | 16×4000×365 | 22.885 |  | 116.652 | 0.775 | 140.318 | yes |
+| gpu_cuda | 16×4000×365 | 22.866 | 32.551 | 1.416 | 0.699 | 57.341 | yes |
+| gpu_cuda_tiled | 16×4000×365 | 22.853 |  | 3.056 | 0.670 | 26.510 | yes |
+| cpu | 32×16000×365 |  |  | 38859.818 |  | 38859.818 | yes |
+| gpu_torch | 32×16000×365 | CUDA out of memory |  |  |  |  | n/a |
+| gpu_cuda | 32×16000×365 | 181.812 | 261.119 | 10.424 | 3.612 | 457.143 | yes |
+| gpu_cuda_tiled | 32×16000×365 | 181.768 |  | 22.778 | 3.593 | 208.206 | yes |
 <!-- bench-table:end -->
 
 ## Development
@@ -106,8 +134,8 @@ The `gpu` extra (`cuda-core[cu12]`) installs only on Linux and Windows.
 
 ## Screenshots from the Kaggle run
 
-Outputs are copied from the log of the Kaggle run (version 2, private notebook) and rendered
-locally; only the notebook is shown.
+Outputs are copied from the log of the latest Kaggle run (version 3, private notebook) and
+rendered locally; only the notebook is shown.
 
 | Environment | Tests | Benchmark |
 |---|---|---|

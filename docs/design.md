@@ -14,6 +14,10 @@ longest runs. The spec is docs/hazards.md.
 
 ## Kernel layout
 
+There are two kernels. The default, `heat_hazards_tiled_*`, is described under "Tiled kernel"
+below; it was written after the first T4 run showed the cost of the transpose that the original
+day-major kernel needs. The day-major kernel is kept for comparison (`layout="day_major"`).
+
 One thread handles one `(scenario, location)` row and loops over all days, keeping a count, a
 current run and a best run per hazard in registers. Rows are independent, so there is no
 inter-thread communication and no atomics.
@@ -70,7 +74,8 @@ STATUS.md). The largest benchmark size is 32 × 16,000 × 365 = 186.9 million ce
 
 | Implementation | What is live on the GPU at its peak | Estimate |
 |---|---|---|
-| `gpu_cuda` | 3 inputs (0.75 GB each) + 3 day-major copies | about 4.5 GB |
+| `gpu_cuda`, day-major | 3 inputs (0.75 GB each) + 3 day-major copies | about 4.5 GB |
+| `gpu_cuda`, tiled (default) | 3 inputs only | about 2.2 GB |
 | `gpu_torch` | 3 inputs (2.2 GB) + run-length step: bool masks (0.75 GB), `cumsum` int32 (3.0 GB), `zeros_like` (3.0 GB), `where` (3.0 GB), `cummax` values (3.0 GB) and its int64 indices (6.0 GB) | about 21 GB |
 
 A Tesla T4 has 15 GB usable, so `gpu_torch` runs out of memory at that size while the custom
@@ -79,14 +84,38 @@ ops version materialises every intermediate as a full-size tensor. The benchmark
 out-of-memory result as `error` instead of crashing, so the table shows it. `batch.py` is the way
 to run `gpu_torch` on inputs this large.
 
-## Side note: where the end-to-end time goes
+## Side note: where the end-to-end time went, and the fix
 
-At the largest size on the T4, kernel compute was 10.4 ms of 457.6 ms end to end. The
-day-major transpose took 261 ms and the host-to-device copy 182 ms. The coalesced layout makes the
-kernel fast, but producing that layout with a separate PyTorch copy costs about 25 times the
-kernel itself. Options, none implemented yet: generate or store data day-major so no transpose is
-needed, transpose on the host while copying, or have the kernel read the original layout through
-shared-memory tiles.
+First T4 run, largest size: kernel compute was 10.4 ms of 457.6 ms end to end. The day-major
+transpose took 261 ms and the host-to-device copy 182 ms. The coalesced layout made the kernel
+fast, but producing that layout with a separate PyTorch copy cost about 25 times the kernel.
+
+## Tiled kernel
+
+`heat_hazards_tiled_*` reads the original `[scenario, location, day]` layout, so nothing is
+transposed. Each block of 128 threads owns 128 consecutive rows. For each chunk of 16 days
+(8 for float64, so a tile row is 64 bytes) the block copies the 128 × 16 tile of each input into
+shared memory. Consecutive threads load consecutive days of one row, so global reads are
+coalesced. Then each thread walks its own row in the tile. Rows are padded by one element so
+threads reading down their rows hit different shared-memory banks. Shared memory per block is
+about 26 KB (float32) or 28 KB (float64), under the 48 KB static limit.
+
+Measured on the T4 (second run, same sizes):
+
+| Size | day-major + transpose, end to end | tiled, end to end | tiled compute | day-major compute |
+|---|---|---|---|---|
+| 1×1000×365 | 0.96 ms | 0.93 ms | 0.55 ms | 0.45 ms |
+| 4×1000×365 | 2.13 ms | 1.94 ms | 0.42 ms | 0.35 ms |
+| 16×4000×365 | 57.3 ms | 26.5 ms | 3.06 ms | 1.42 ms |
+| 32×16000×365 | 457.1 ms | 208.2 ms | 22.8 ms | 10.4 ms |
+
+The tiled kernel computes about twice as slowly as the day-major one (extra synchronisation
+and shared-memory traffic) but removes the transpose, so end to end it is about 2.2× faster at
+the two large sizes. It also needs no extra device copies, which halves its memory (about 2.2 GB
+instead of 4.5 GB at the largest size). Now the host-to-device copy is 87% of end-to-end time at
+the largest size; 2.24 GB in 182 ms is about 12 GB/s, near PCIe 3 x16 bandwidth, so overlapping
+it with the 23 ms kernel would hide little. The remaining lever is not moving the data at all:
+generate or load it on the GPU.
 
 ## Kaggle environment notes (first run, 2026-10-04)
 

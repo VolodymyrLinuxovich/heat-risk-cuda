@@ -2,11 +2,12 @@
 
 The kernel source is ``kernels/heat_hazards.cu``. It is compiled once per (source, options,
 arch, NVRTC version) to a cubin for sm_75 (Tesla T4), cached on disk, and launched on torch
-tensors via ``data_ptr()`` on torch's current CUDA stream.
+tensors via ``data_ptr()`` on torch's current CUDA stream. Two kernels exist: the default
+shared-memory tiled kernel reads the original layout; the day-major kernel needs a transpose.
 
 ``cuda.core`` is imported lazily, so ``import heat_risk.gpu_cuda`` works without the ``gpu``
 extra (for example on macOS, where no cuda-core wheel exists). Only compiling and launching need
-it. Nothing in this module has been run on a GPU yet; see STATUS.md.
+it. Both kernels have passed the GPU test suite on a Tesla T4; see STATUS.md.
 """
 
 from __future__ import annotations
@@ -230,12 +231,13 @@ def evaluate_tensors(
     tx90: torch.Tensor,
     tx95: torch.Tensor,
     options: CompileOptions = DEFAULT_OPTIONS,
-    layout: str = "day_major",
+    layout: str = "tiled",
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """CUDA tensors [scenario, location, day] in; int32 [scenario, location, hazard] out.
 
-    ``layout="day_major"`` transposes on the GPU and runs the day-major kernel;
-    ``layout="tiled"`` runs the shared-memory tiled kernel on the original layout.
+    ``layout="tiled"`` (default) runs the shared-memory tiled kernel on the original layout.
+    ``layout="day_major"`` transposes on the GPU first and runs the day-major kernel; on a
+    Tesla T4 that transpose made end-to-end time about 2.2x slower at large sizes.
     """
     if layout not in LAYOUTS:
         raise ValueError(f"layout must be one of {LAYOUTS}")
@@ -265,7 +267,7 @@ def evaluate(
     tx90: np.ndarray,
     tx95: np.ndarray,
     device: str | torch.device = "cuda:0",
-    layout: str = "day_major",
+    layout: str = "tiled",
 ) -> HazardResult:
     """NumPy in, NumPy out. Needs a CUDA device and the ``gpu`` extra."""
     validate_inputs(tmax, tmin, rh, tx90, tx95)

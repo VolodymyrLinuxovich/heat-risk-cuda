@@ -43,6 +43,13 @@ def test_cache_key_covers_source_options_and_nvrtc() -> None:
     assert base != gpu_cuda.cache_key("src", o, "12.8")
 
 
+def test_tiled_is_the_default_layout() -> None:
+    import inspect
+
+    for fn in (gpu_cuda.evaluate, gpu_cuda.evaluate_tensors):
+        assert inspect.signature(fn).parameters["layout"].default == "tiled"
+
+
 def test_default_options_disable_fma() -> None:
     assert gpu_cuda.DEFAULT_OPTIONS.fma is False and gpu_cuda.DEFAULT_OPTIONS.arch == "sm_75"
 
