@@ -32,6 +32,7 @@ heat_risk = ["kernels/*.cu"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests"]
 markers = ["gpu: needs a CUDA device (skipped when none is present)"]
 
 [tool.ruff]
