@@ -1,6 +1,6 @@
 # Status
 
-As of 2026-10-04. Counts come from `pytest --collect-only` by marker.
+As of 2026-10-04.
 
 ## Ran and passed
 
@@ -17,20 +17,23 @@ properties), gpu_torch on CPU tensors, cross-implementation parity for `cpu` and
 `gpu_torch[cpu]`, batching, the benchmark refusal path, dry run and table generator, and a CPU
 smoke run of the Kaggle notebook.
 
-## Written but not yet run (needs a CUDA GPU)
+## Ran on a GPU: Kaggle, 2 × Tesla T4 (2026-10-04)
 
-57 tests marked `gpu`. They skip without a CUDA device; none has run.
+Private Kaggle notebook run of `notebooks/kaggle_heat_risk_cuda.ipynb` on `cuda:0`, driver
+580.178.04, torch 2.11.0+cu128, cuda-core 1.2.1, Python 3.13:
 
-| Test | Cases |
+| Command | Result |
 |---|---|
-| `test_parity.py` (`gpu_torch[cuda]` and `gpu_cuda`) | 48 |
-| `test_batch.py::test_batched_equals_unbatched[gpu_cuda]` | 4 |
-| `test_gpu_torch.py::test_random_parity_with_cpu_on_cuda` | 2 |
-| `test_kernel_compile.py::test_toy_on_gpu` | 2 |
-| `test_kernel_compile.py::test_disk_cache_roundtrip` | 1 |
+| `pytest -m "not gpu"` | 138 passed, 2 skipped (two tests that only apply without CUDA) |
+| `HEAT_RISK_REQUIRE_NVRTC=1 pytest -m "gpu or nvrtc"` | **61 passed**: all 57 gpu tests (`gpu_cuda` and `gpu_torch[cuda]` parity on every edge case, batching, toy case, cubin disk cache) and the 4 NVRTC compile tests |
 
-Also not yet run: the CUDA timing path of `bench/run.py`, `bench/plot.py` on real results, and
-the notebook's GPU cells.
+So the custom kernel gives exactly the cpu reference's counts and runs on a T4, in float32 and
+float64.
+
+## Not yet measured
+
+The benchmark did not run in that session: the notebook's shell helper had a 120 s timeout,
+which killed `bench.run`. Fixed (no timeout for the benchmark cell); see the next run.
 
 ## Next: on Kaggle (GPU T4 x2, Internet on)
 

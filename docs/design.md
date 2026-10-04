@@ -62,6 +62,29 @@ version. The two kernel entry points are plain `extern "C"` names (`heat_hazards
 `__cuda_stream__` protocol. Kernel work is therefore ordered with the surrounding torch ops (the
 transpose before it, the copy back after it) without extra synchronization.
 
-## Not verified yet
+## Side note: GPU memory at the largest benchmark size
 
-Nothing in `gpu_cuda` has run on a GPU. See STATUS.md for what has run where.
+These are estimates from reading the code, not measurements. The largest benchmark size is
+32 × 16,000 × 365 = 186.9 million cells, in float32.
+
+| Implementation | What is live on the GPU at its peak | Estimate |
+|---|---|---|
+| `gpu_cuda` | 3 inputs (0.75 GB each) + 3 day-major copies | about 4.5 GB |
+| `gpu_torch` | 3 inputs (2.2 GB) + run-length step: bool masks (0.75 GB), `cumsum` int32 (3.0 GB), `zeros_like` (3.0 GB), `where` (3.0 GB), `cummax` values (3.0 GB) and its int64 indices (6.0 GB) | about 21 GB |
+
+A Tesla T4 has 15 GB usable, so `gpu_torch` is expected to run out of memory at that size while
+the custom kernel is not. The kernel keeps its per-hazard counters in registers; the library
+ops version materialises every intermediate as a full-size tensor. The benchmark records an
+out-of-memory result as `error` instead of crashing, so the table shows it. `batch.py` is the way
+to run `gpu_torch` on inputs this large.
+
+## Kaggle environment notes (first run, 2026-10-04)
+
+- 2 × Tesla T4, 15,360 MiB each; driver 580.178.04 (reports CUDA 13.0); Python 3.13.
+- torch 2.11.0+cu128, cuda-bindings 12.9.7; system `nvcc` present (12.8), though this project does
+  not need it.
+- Kaggle preinstalls cuda-core 0.3.2. Installing the pinned 1.2.1 makes pip report conflicts
+  with Kaggle's preinstalled `dask-cuda` and `numba-cuda`, which want cuda-core below 1.0. This
+  project uses neither, and the tests passed, but other code in the same session might break.
+- cuda.core 1.2.1 warns that passing a foreign stream object to `launch` is deprecated; the
+  wrapper now converts it explicitly with `Device.create_stream(obj)`.

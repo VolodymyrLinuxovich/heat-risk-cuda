@@ -265,7 +265,26 @@ def benchmark(
                 dev = device if device is not None else torch.device("cpu")
                 if impl == "gpu_cuda" and dev.type != "cuda":
                     continue  # the custom kernel needs a CUDA device
-                stages, got = run_device(impl, arrays, dev, reps, warmup, options)
+                try:
+                    stages, got = run_device(impl, arrays, dev, reps, warmup, options)
+                except torch.cuda.OutOfMemoryError as exc:
+                    # A real outcome on this GPU at this size: record it, do not hide it.
+                    torch.cuda.empty_cache()
+                    results.append(
+                        {
+                            "impl": impl,
+                            "custom_kernel": impl == "gpu_cuda",
+                            "scenarios": s,
+                            "locations": n_loc,
+                            "days": days,
+                            "cells": s * n_loc * days,
+                            "stages_ms": None,
+                            "matches_cpu": None,
+                            "error": f"CUDA out of memory: {str(exc).splitlines()[0]}",
+                        }
+                    )
+                    print(f"{impl:>9} {s}x{n_loc}x{days}: CUDA out of memory")
+                    continue
             got_counts = np.asarray(got[0]).reshape(reference.counts.shape)
             got_runs = np.asarray(got[1]).reshape(reference.longest_run.shape)
             matches = bool(

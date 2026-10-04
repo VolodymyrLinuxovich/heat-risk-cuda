@@ -156,12 +156,14 @@ def launch_day_major(
     if n_rows * max(days, 1) >= 2**62:
         raise ValueError("input too large")
 
-    Device(dev.index).set_current()
+    device = Device(dev.index)
+    device.set_current()
+    stream = device.create_stream(_TorchStream(torch.cuda.current_stream(dev)))
     kernel = _load_module(options).get_kernel(KERNEL_NAMES[tmax_dm.dtype])
     scalar = np.float32 if tmax_dm.dtype == torch.float32 else np.float64
     config = LaunchConfig(grid=(n_rows + BLOCK_SIZE - 1) // BLOCK_SIZE, block=BLOCK_SIZE)
     launch(
-        _TorchStream(torch.cuda.current_stream(dev)),
+        stream,
         config,
         kernel,
         tmax_dm.data_ptr(),

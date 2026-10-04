@@ -15,8 +15,8 @@ implementations of the same specification:
 
 ## Status and honesty
 
-- All three implementations are written. `cpu` and `gpu_torch` are tested on CPU; the
-  `gpu_cuda` kernel compiles with NVRTC in CI but has **not yet run on a GPU**. See STATUS.md.
+- All three implementations are written and tested. On a Kaggle Tesla T4 the custom kernel
+  passed all GPU parity tests (61 passed). Timings are not measured yet. See STATUS.md.
 - The hazard definitions are in [docs/hazards.md](docs/hazards.md). They are project
   simplifications, not ETCCDI indices.
 - **Nothing has been measured on a GPU yet.** No speedup is claimed until it is measured, and
@@ -28,9 +28,9 @@ implementations of the same specification:
 | Claim | Status |
 |---|---|
 | `cpu` matches hand-computed cases, NWS chart values and property tests | verified on CPU (macOS and Linux CI) |
-| `gpu_torch` matches `cpu` | verified on CPU tensors; also checked once by hand on an Apple M5 GPU via MPS (float32); not yet on CUDA |
+| `gpu_torch` matches `cpu` | verified on CPU tensors and on a Kaggle Tesla T4 |
 | `gpu_cuda` kernel compiles for sm_75, float32 and float64, no `fma` in the PTX | verified in Linux CI with NVRTC, no GPU |
-| `gpu_cuda` produces correct results | **not yet run**: needs a CUDA GPU |
+| `gpu_cuda` produces correct results | verified on a Kaggle Tesla T4: all parity and edge-case tests pass, float32 and float64 |
 | Any timing or speedup | **not yet measured** |
 
 No speedup is claimed until it is measured. When it is, compute-only, layout prep, transfers and

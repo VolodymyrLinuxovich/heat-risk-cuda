@@ -24,9 +24,9 @@ PROBE = """\
 import os, shutil, subprocess, sys
 from importlib import metadata
 
-def sh(cmd):
+def sh(cmd, timeout=120):
     try:
-        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=120)
+        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
         return (r.stdout + r.stderr).strip() or f"(no output, exit {r.returncode})"
     except Exception as exc:
         return f"(failed: {exc})"
@@ -95,8 +95,10 @@ BENCH = """\
 # 5. Benchmark on cuda:0. Writes bench/results/<time>_<gpu>_dev0.json and refuses to write
 #    anything without a GPU name. On CPU this runs the --dry-run path, which writes nothing.
 if HAS_GPU and not SMOKE:
-    print(sh(f"{sys.executable} -m bench.run --device cuda:0 --reps 20 --warmup 3 "
-             "--sizes 1x1000x365 4x1000x365 16x4000x365 32x16000x365 2>&1 | tail -20"))
+    # No timeout: the largest size takes minutes on the CPU reference.
+    print(sh(f"{sys.executable} -m bench.run --device cuda:0 --reps 10 --warmup 2 "
+             "--sizes 1x1000x365 4x1000x365 16x4000x365 32x16000x365 2>&1 | tail -20",
+             timeout=None))
 else:
     print(sh(f"{sys.executable} -m bench.run --dry-run 2>&1 | tail -6"))"""
 

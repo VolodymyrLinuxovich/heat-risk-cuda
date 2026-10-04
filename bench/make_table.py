@@ -62,8 +62,12 @@ def render(records: list[dict[str, Any]]) -> str:
         )
         out.append("|---|---|---|---|---|---|---|---|")
         for r in rec["results"]:
-            st = r["stages_ms"]
             size = f"{r['scenarios']}×{r['locations']}×{r['days']}"
+            if r.get("error"):
+                short = r["error"].split(":")[0]
+                out.append(f"| {r['impl']} | {size} | {short} |  |  |  |  | n/a |")
+                continue
+            st = r["stages_ms"]
             out.append(
                 f"| {r['impl']} | {size} | {_fmt(st.get('h2d'))} | {_fmt(st.get('layout_prep'))} "
                 f"| {_fmt(st.get('compute'))} | {_fmt(st.get('d2h'))} "

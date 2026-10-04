@@ -116,3 +116,19 @@ def test_update_readme_between_markers() -> None:
 def test_fixture_is_labelled_fake() -> None:
     rec = json.loads(FIXTURE.read_text())
     assert "FAKE" in rec["_comment"] and "FAKE" in rec["gpu"]["name"]
+
+
+def test_out_of_memory_is_recorded_not_hidden(monkeypatch: pytest.MonkeyPatch) -> None:
+    import numpy as np
+    import torch
+
+    def oom(*args: object, **kwargs: object) -> None:
+        raise torch.cuda.OutOfMemoryError("CUDA out of memory. Tried to allocate 6.00 GiB")
+
+    monkeypatch.setattr(run, "run_device", oom)
+    rec = run.benchmark([(1, 3, 5)], ["cpu", "gpu_torch"], None, 1, 0, 0, np.float32, False, True)
+    gt = next(r for r in rec["results"] if r["impl"] == "gpu_torch")
+    assert gt["error"].startswith("CUDA out of memory")
+    assert gt["stages_ms"] is None and gt["matches_cpu"] is None
+    table = make_table.render([{**rec, "gpu": {"name": "x", "device_index": 0}, "_file": "f"}])
+    assert "| gpu_torch | 1×3×5 | CUDA out of memory |" in table
