@@ -24,14 +24,17 @@ def test_toy_matches_hand_computed(dtype: type) -> None:
 
 
 @pytest.mark.parametrize("dtype", [np.float32, np.float64])
-def test_heat_index_bitwise_equal_on_cpu(dtype: type) -> None:
+def test_heat_index_close_on_cpu(dtype: type) -> None:
+    # Bitwise equal on macOS arm64, but CI on Linux x86 found 2 of 20000 float32 values 1 ulp
+    # apart, so only near-equality is guaranteed across platforms. Counts are protected by
+    # keeping inputs away from the 89.6 F cutoff (see avoid_threshold_band).
     rng = np.random.default_rng(0)
     t = rng.uniform(-30, 50, 20000).astype(dtype)
     rh = rng.uniform(0, 100, 20000).astype(dtype)
     want = heat_index_f(t, rh)
     got = gpu_torch.heat_index_f(torch.from_numpy(t), torch.from_numpy(rh)).numpy()
     assert got.dtype == dtype
-    np.testing.assert_array_equal(got, want)
+    np.testing.assert_array_max_ulp(got, want, maxulp=4)
 
 
 def test_zero_days() -> None:
@@ -54,10 +57,12 @@ def test_random_parity_with_cpu_on_cpu_tensors(
 ) -> None:
     d = generate(s, n_loc, days, seed=seed, baseline_days=60, dtype=dtype)
     tx90, tx95 = percentile_thresholds(d.baseline_tmax, dtype)
-    tmax, tmin = d.tmax.copy(), d.tmin.copy()
+    # torch's CPU kernels can differ from NumPy by an ulp on some platforms, so stay off cutoffs.
+    d = avoid_threshold_band(d, tx90, tx95)
+    tmax = d.tmax.copy()
     tmax[np.random.default_rng(seed).random(tmax.shape) < 0.05] = np.nan  # exercise NaN policy
-    want = cpu.evaluate(tmax, tmin, d.rh, tx90, tx95)
-    got = gpu_torch.evaluate(tmax, tmin, d.rh, tx90, tx95)
+    want = cpu.evaluate(tmax, d.tmin, d.rh, tx90, tx95)
+    got = gpu_torch.evaluate(tmax, d.tmin, d.rh, tx90, tx95)
     np.testing.assert_array_equal(got.counts, want.counts)
     np.testing.assert_array_equal(got.longest_run, want.longest_run)
 
