@@ -51,7 +51,7 @@ def test_dry_run_writes_nothing(capsys: pytest.CaptureFixture[str]) -> None:
     out = capsys.readouterr().out
     assert "dry run: results not written" in out
     assert "matches_cpu=True" in out and "matches_cpu=False" not in out
-    assert "gpu_cuda" not in out  # the custom kernel is never faked on CPU
+    assert "gpu_cuda" not in out  # the custom kernels are never faked on CPU
 
 
 def test_benchmark_record_schema_on_cpu() -> None:

@@ -27,6 +27,12 @@ from heat_risk.spec import HEAT_INDEX_F, HOT_NIGHT_C, N_HAZARDS, HazardResult, v
 ARCH = "sm_75"
 BLOCK_SIZE = 128
 KERNEL_NAMES = {torch.float32: "heat_hazards_f32", torch.float64: "heat_hazards_f64"}
+TILED_KERNEL_NAMES = {
+    torch.float32: "heat_hazards_tiled_f32",
+    torch.float64: "heat_hazards_tiled_f64",
+}
+TILE_ROWS = 128  # must match TILE_ROWS in heat_hazards.cu; the tiled kernel needs block == tile
+LAYOUTS = ("day_major", "tiled")
 
 
 def is_custom_kernel() -> bool:
@@ -129,46 +135,44 @@ def to_day_major(x: torch.Tensor) -> torch.Tensor:
     return x.reshape(s * n_loc, days).t().contiguous()
 
 
-def launch_day_major(
-    tmax_dm: torch.Tensor,
-    tmin_dm: torch.Tensor,
-    rh_dm: torch.Tensor,
+def _launch(
+    kernel_name: str,
+    tmax: torch.Tensor,
+    tmin: torch.Tensor,
+    rh: torch.Tensor,
     tx90: torch.Tensor,
     tx95: torch.Tensor,
+    n_rows: int,
     n_locations: int,
-    options: CompileOptions = DEFAULT_OPTIONS,
+    days: int,
+    options: CompileOptions,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Launch on day-major CUDA tensors; returns int32 ``(counts, runs)`` shaped [row, hazard].
-
-    Asynchronous on torch's current stream, like any torch op.
-    """
     from cuda.core import Device, LaunchConfig, launch
 
-    days, n_rows = tmax_dm.shape
-    dev = tmax_dm.device
+    dev = tmax.device
     counts = torch.zeros((n_rows, N_HAZARDS), dtype=torch.int32, device=dev)
     runs = torch.zeros((n_rows, N_HAZARDS), dtype=torch.int32, device=dev)
     if n_rows == 0 or days == 0:
         return counts, runs
-    for t in (tmax_dm, tmin_dm, rh_dm, tx90, tx95):
+    for t in (tmax, tmin, rh, tx90, tx95):
         if not t.is_cuda or not t.is_contiguous() or t.device != dev:
             raise ValueError("all inputs must be contiguous CUDA tensors on one device")
-    if n_rows * max(days, 1) >= 2**62:
-        raise ValueError("input too large")
+    if n_rows * N_HAZARDS >= 2**31:
+        raise ValueError("too many rows for int32 output indexing")
 
     device = Device(dev.index)
     device.set_current()
     stream = device.create_stream(_TorchStream(torch.cuda.current_stream(dev)))
-    kernel = _load_module(options).get_kernel(KERNEL_NAMES[tmax_dm.dtype])
-    scalar = np.float32 if tmax_dm.dtype == torch.float32 else np.float64
+    kernel = _load_module(options).get_kernel(kernel_name)
+    scalar = np.float32 if tmax.dtype == torch.float32 else np.float64
     config = LaunchConfig(grid=(n_rows + BLOCK_SIZE - 1) // BLOCK_SIZE, block=BLOCK_SIZE)
     launch(
         stream,
         config,
         kernel,
-        tmax_dm.data_ptr(),
-        tmin_dm.data_ptr(),
-        rh_dm.data_ptr(),
+        tmax.data_ptr(),
+        tmin.data_ptr(),
+        rh.data_ptr(),
         tx90.data_ptr(),
         tx95.data_ptr(),
         counts.data_ptr(),
@@ -182,7 +186,25 @@ def launch_day_major(
     return counts, runs
 
 
-def evaluate_tensors(
+def launch_day_major(
+    tmax_dm: torch.Tensor,
+    tmin_dm: torch.Tensor,
+    rh_dm: torch.Tensor,
+    tx90: torch.Tensor,
+    tx95: torch.Tensor,
+    n_locations: int,
+    options: CompileOptions = DEFAULT_OPTIONS,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Launch on day-major CUDA tensors; returns int32 ``(counts, runs)`` shaped [row, hazard].
+
+    Asynchronous on torch's current stream, like any torch op.
+    """
+    days, n_rows = tmax_dm.shape
+    name = KERNEL_NAMES[tmax_dm.dtype]
+    return _launch(name, tmax_dm, tmin_dm, rh_dm, tx90, tx95, n_rows, n_locations, days, options)
+
+
+def launch_tiled(
     tmax: torch.Tensor,
     tmin: torch.Tensor,
     rh: torch.Tensor,
@@ -190,8 +212,40 @@ def evaluate_tensors(
     tx95: torch.Tensor,
     options: CompileOptions = DEFAULT_OPTIONS,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """CUDA tensors [scenario, location, day] in; int32 [scenario, location, hazard] out."""
+    """Launch the shared-memory tiled kernel on the original [scenario, location, day] layout.
+
+    No transpose is needed. Returns int32 ``(counts, runs)`` shaped [row, hazard].
+    """
+    if BLOCK_SIZE != TILE_ROWS:
+        raise RuntimeError("the tiled kernel needs BLOCK_SIZE == TILE_ROWS")
+    s, n_loc, days = tmax.shape
+    name = TILED_KERNEL_NAMES[tmax.dtype]
+    return _launch(name, tmax, tmin, rh, tx90, tx95, s * n_loc, n_loc, days, options)
+
+
+def evaluate_tensors(
+    tmax: torch.Tensor,
+    tmin: torch.Tensor,
+    rh: torch.Tensor,
+    tx90: torch.Tensor,
+    tx95: torch.Tensor,
+    options: CompileOptions = DEFAULT_OPTIONS,
+    layout: str = "day_major",
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """CUDA tensors [scenario, location, day] in; int32 [scenario, location, hazard] out.
+
+    ``layout="day_major"`` transposes on the GPU and runs the day-major kernel;
+    ``layout="tiled"`` runs the shared-memory tiled kernel on the original layout.
+    """
+    if layout not in LAYOUTS:
+        raise ValueError(f"layout must be one of {LAYOUTS}")
     s, n_loc, _ = tmax.shape
+    if layout == "tiled":
+        counts, runs = launch_tiled(
+            tmax.contiguous(), tmin.contiguous(), rh.contiguous(),
+            tx90.contiguous(), tx95.contiguous(), options,
+        )
+        return counts.reshape(s, n_loc, N_HAZARDS), runs.reshape(s, n_loc, N_HAZARDS)
     counts, runs = launch_day_major(
         to_day_major(tmax),
         to_day_major(tmin),
@@ -211,10 +265,11 @@ def evaluate(
     tx90: np.ndarray,
     tx95: np.ndarray,
     device: str | torch.device = "cuda:0",
+    layout: str = "day_major",
 ) -> HazardResult:
     """NumPy in, NumPy out. Needs a CUDA device and the ``gpu`` extra."""
     validate_inputs(tmax, tmin, rh, tx90, tx95)
     arrays = (tmax, tmin, rh, tx90, tx95)
     t = [torch.from_numpy(np.ascontiguousarray(a)).to(device) for a in arrays]
-    counts, runs = evaluate_tensors(t[0], t[1], t[2], t[3], t[4])
+    counts, runs = evaluate_tensors(t[0], t[1], t[2], t[3], t[4], layout=layout)
     return HazardResult(counts=counts.cpu().numpy(), longest_run=runs.cpu().numpy())

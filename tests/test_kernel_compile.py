@@ -12,10 +12,25 @@ def test_is_custom_kernel() -> None:
     assert gpu_cuda.is_custom_kernel() is True
 
 
-def test_source_is_packaged_with_both_entry_points() -> None:
+def test_source_is_packaged_with_all_entry_points() -> None:
     src = gpu_cuda.kernel_source()
     for name in gpu_cuda.KERNEL_NAMES.values():
         assert f"HEAT_HAZARDS_ENTRY({name}," in src
+    for name in gpu_cuda.TILED_KERNEL_NAMES.values():
+        assert f"HEAT_HAZARDS_TILED_ENTRY({name}," in src
+
+
+def test_tile_rows_match_kernel_source() -> None:
+    assert f"#define TILE_ROWS {gpu_cuda.TILE_ROWS}" in gpu_cuda.kernel_source()
+    assert gpu_cuda.BLOCK_SIZE == gpu_cuda.TILE_ROWS
+
+
+def test_unknown_layout_rejected() -> None:
+    import torch
+
+    z = torch.zeros((1, 1, 1))
+    with pytest.raises(ValueError):
+        gpu_cuda.evaluate_tensors(z, z, z, z[0, 0], z[0, 0], layout="bogus")
 
 
 def test_cache_key_covers_source_options_and_nvrtc() -> None:
@@ -76,7 +91,8 @@ def test_cuda_core_translates_fma_false_to_fmad_flag() -> None:
 def test_compiles_to_ptx_for_sm75_without_fma() -> None:
     ptx = _ptx(fma=False)
     assert ".target sm_75" in ptx
-    for name in gpu_cuda.KERNEL_NAMES.values():
+    names = [*gpu_cuda.KERNEL_NAMES.values(), *gpu_cuda.TILED_KERNEL_NAMES.values()]
+    for name in names:
         assert re.search(rf"\.entry\s+{name}\b", ptx), name
     assert not re.search(r"\bfma\.rn\.f(32|64)\b", ptx), "fma found despite fma=False"
 
@@ -94,9 +110,10 @@ def test_compiles_to_cubin_for_sm75() -> None:
 
 
 @pytest.mark.gpu
+@pytest.mark.parametrize("layout", gpu_cuda.LAYOUTS)
 @pytest.mark.parametrize("dtype", [np.float32, np.float64])
-def test_toy_on_gpu(dtype: type) -> None:
-    r = gpu_cuda.evaluate(*toy(dtype))
+def test_toy_on_gpu(dtype: type, layout: str) -> None:
+    r = gpu_cuda.evaluate(*toy(dtype), layout=layout)
     assert r.counts[0].tolist() == EXPECTED_COUNTS
     assert r.longest_run[0].tolist() == EXPECTED_RUNS
 

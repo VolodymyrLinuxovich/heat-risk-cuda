@@ -25,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     fig, axes = plt.subplots(1, 2, figsize=(11, 4), sharey=True)
     for ax, stage in zip(axes, ("compute", "end_to_end"), strict=True):
         for rec in records:
-            for impl in ("cpu", "gpu_torch", "gpu_cuda"):
+            for impl in ("cpu", "gpu_torch", "gpu_cuda", "gpu_cuda_tiled"):
                 rows = sorted(
                     (
                         r

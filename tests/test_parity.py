@@ -28,6 +28,11 @@ IMPLS = [
         marks=pytest.mark.gpu,
     ),
     pytest.param(gpu_cuda.evaluate, id="gpu_cuda", marks=pytest.mark.gpu),
+    pytest.param(
+        lambda *a: gpu_cuda.evaluate(*a, layout="tiled"),
+        id="gpu_cuda[tiled]",
+        marks=pytest.mark.gpu,
+    ),
 ]
 DTYPES = [np.float32, np.float64]
 HOT, TX90, TX95, HI = (HAZARDS.index(h) for h in ("hot_night", "tx90", "tx95", "heat_index"))
@@ -55,7 +60,7 @@ def _assert_same(got: HazardResult, want: HazardResult) -> None:
 def test_matches_cpu_on_random_inputs(
     impl: Evaluate, dtype: type, s: int, n_loc: int
 ) -> None:
-    args = _data(s, n_loc, 400, dtype, seed=s * 1000 + n_loc)
+    args = _data(s, n_loc, 403, dtype, seed=s * 1000 + n_loc)  # 403 days: not a tile multiple
     _assert_same(impl(*args), cpu.evaluate(*args))
 
 
@@ -156,3 +161,13 @@ def test_single_location_single_day(impl: Evaluate) -> None:
     r = impl(one + 10, one, np.full_like(one, 50), np.array([30.0]), np.array([40.0]))
     assert r.counts[0, 0].tolist() == [1, 0, 1, 1]
     assert r.longest_run[0, 0].tolist() == [1, 0, 1, 1]
+
+
+@pytest.mark.gpu
+@pytest.mark.parametrize("dtype", DTYPES)
+@pytest.mark.parametrize("days", [1, 7, 8, 9, 15, 16, 17, 33])  # around 8 and 16 day tiles
+@pytest.mark.parametrize("n_loc", [1, 127, 128, 129, 300])  # around the 128 row tile
+def test_tiled_kernel_tile_edges(dtype: type, days: int, n_loc: int) -> None:
+    args = _data(1, n_loc, days, dtype, seed=days * 1000 + n_loc)
+    got = gpu_cuda.evaluate(*args, layout="tiled")
+    _assert_same(got, cpu.evaluate(*args))

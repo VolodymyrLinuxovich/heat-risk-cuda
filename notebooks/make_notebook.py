@@ -83,7 +83,7 @@ else:
     print(sh(f'{sys.executable} -m pytest -m "not gpu" -q -rs 2>&1 | tail -15'))"""
 
 GPU_TESTS = """\
-# 4. GPU and NVRTC tests: the parity tests for gpu_torch[cuda] and gpu_cuda, kernel compile,
+# 4. GPU and NVRTC tests: parity for gpu_torch[cuda], gpu_cuda and gpu_cuda[tiled], compile,
 #    cubin cache. A skip here is reported as a skip, never as a pass.
 if HAS_GPU and not SMOKE:
     cmd = f'{sys.executable} -m pytest -m "gpu or nvrtc" -rs -q 2>&1 | tail -30'

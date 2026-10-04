@@ -8,7 +8,8 @@ CPU smoke test, never writes a file:
 Stages are timed separately and reported as the median over ``--reps`` after ``--warmup``
 untimed runs:
     h2d          host-to-device copy of the five inputs
-    layout_prep  [scenario, location, day] -> day-major transpose (gpu_cuda only)
+    layout_prep  [scenario, location, day] -> day-major transpose (gpu_cuda only;
+                 gpu_cuda_tiled reads the original layout and has no such stage)
     compute      the hazard evaluation itself
     d2h          device-to-host copy of counts and runs
     end_to_end   all of the above in one timed region
@@ -119,13 +120,15 @@ def run_device(
     def compute(d: list[torch.Tensor], prepped: Any) -> tuple[torch.Tensor, torch.Tensor]:
         if impl == "gpu_torch":
             return gpu_torch.evaluate_tensors(*d)
+        if impl == "gpu_cuda_tiled":
+            return gpu_cuda.launch_tiled(d[0], d[1], d[2], d[3], d[4], options)
         tmax_dm, tmin_dm, rh_dm = prepped
         n_loc = d[0].shape[1]
         return gpu_cuda.launch_day_major(tmax_dm, tmin_dm, rh_dm, d[3], d[4], n_loc, options)
 
     def prep(d: list[torch.Tensor]) -> Any:
-        if impl == "gpu_torch":
-            return None
+        if impl != "gpu_cuda":
+            return None  # gpu_torch and gpu_cuda_tiled use the original layout
         return tuple(gpu_cuda.to_day_major(x) for x in d[:3])
 
     def d2h(out: tuple[torch.Tensor, torch.Tensor]) -> tuple[np.ndarray, np.ndarray]:
@@ -263,8 +266,8 @@ def benchmark(
                 got = (out.counts, out.longest_run)
             else:
                 dev = device if device is not None else torch.device("cpu")
-                if impl == "gpu_cuda" and dev.type != "cuda":
-                    continue  # the custom kernel needs a CUDA device
+                if impl.startswith("gpu_cuda") and dev.type != "cuda":
+                    continue  # the custom kernels need a CUDA device
                 try:
                     stages, got = run_device(impl, arrays, dev, reps, warmup, options)
                 except torch.cuda.OutOfMemoryError as exc:
@@ -273,7 +276,7 @@ def benchmark(
                     results.append(
                         {
                             "impl": impl,
-                            "custom_kernel": impl == "gpu_cuda",
+                            "custom_kernel": impl.startswith("gpu_cuda"),
                             "scenarios": s,
                             "locations": n_loc,
                             "days": days,
@@ -294,7 +297,7 @@ def benchmark(
             results.append(
                 {
                     "impl": impl,
-                    "custom_kernel": impl == "gpu_cuda",
+                    "custom_kernel": impl.startswith("gpu_cuda"),
                     "scenarios": s,
                     "locations": n_loc,
                     "days": days,
@@ -328,7 +331,9 @@ def benchmark(
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--sizes", nargs="+", type=parse_size, default=None)
-    p.add_argument("--impls", nargs="+", default=["cpu", "gpu_torch", "gpu_cuda"])
+    p.add_argument(
+        "--impls", nargs="+", default=["cpu", "gpu_torch", "gpu_cuda", "gpu_cuda_tiled"]
+    )
     p.add_argument("--device", default="cuda:0")
     p.add_argument("--reps", type=int, default=20)
     p.add_argument("--warmup", type=int, default=3)
@@ -342,7 +347,7 @@ def main(argv: list[str] | None = None) -> int:
     if a.dry_run:
         device = None
         sizes = a.sizes or [parse_size(x) for x in DRY_RUN_SIZES]
-        impls = [i for i in a.impls if i != "gpu_cuda"]
+        impls = [i for i in a.impls if not i.startswith("gpu_cuda")]
         reps, warmup = min(a.reps, 3), min(a.warmup, 1)
     else:
         if not torch.cuda.is_available():

@@ -14,6 +14,11 @@ IMPLS = [
     pytest.param(cpu.evaluate, id="cpu"),
     pytest.param(lambda *a: gpu_torch.evaluate(*a, device="cpu"), id="gpu_torch[cpu]"),
     pytest.param(gpu_cuda.evaluate, id="gpu_cuda", marks=pytest.mark.gpu),
+    pytest.param(
+        lambda *a: gpu_cuda.evaluate(*a, layout="tiled"),
+        id="gpu_cuda[tiled]",
+        marks=pytest.mark.gpu,
+    ),
 ]
 
 
