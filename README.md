@@ -23,9 +23,6 @@ implementations of the same specification:
   any benchmark table in this README will be generated from JSON files written by real GPU runs.
 - All data is synthetic (seeded generator).
 
-Developed with AI coding assistance; the author specified the design, reviewed the code, and
-ran all GPU measurements.
-
 ## Development
 
 ```bash
@@ -35,3 +32,18 @@ ruff check && mypy src && pytest -m "not gpu"
 ```
 
 The `gpu` extra (`cuda-core[cu12]`) installs only on Linux and Windows.
+
+## Acknowledgments
+
+- **Heat index:** the US National Weather Service heat index algorithm (the Rothfusz regression
+  with Steadman's simple formula and the NWS adjustments), as published at
+  https://www.wpc.ncep.noaa.gov/html/heatindex_equation.shtml.
+- **Index definitions:** the ETCCDI climate change indices, used as the reference point that this
+  project's simplified TX90/TX95 and hot-night definitions are compared against.
+- **Tooling:** NumPy, PyTorch, Hypothesis, pytest, ruff and mypy. The custom kernel (in progress)
+  uses NVIDIA's open-source CUDA Python tooling (`cuda.core`). This is an independent project;
+  NVIDIA did not create, endorse, or sponsor it.
+- **Compute:** GitHub Actions runs the CPU test suite. GPU measurements are planned on Kaggle's free
+  T4 notebooks and have not been run yet.
+- Developed with AI coding assistance; the author specified the design, reviewed the code, and
+  runs all GPU measurements.
