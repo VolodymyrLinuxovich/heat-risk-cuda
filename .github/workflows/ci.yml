@@ -20,7 +20,7 @@ jobs:
       - name: Install package
         run: pip install -e ".[dev]"
       - run: ruff check
-      - run: mypy src
+      - run: mypy src bench
       - run: pytest -m "not gpu" -rs
 
   nvrtc:

@@ -23,6 +23,12 @@ implementations of the same specification:
   any benchmark table in this README will be generated from JSON files written by real GPU runs.
 - All data is synthetic (seeded generator).
 
+## Benchmark results
+
+<!-- bench-table:start -->
+**Not yet measured.** No benchmark has been run on a GPU yet, so there are no numbers here. No speedup is claimed until it is measured.
+<!-- bench-table:end -->
+
 ## Development
 
 ```bash

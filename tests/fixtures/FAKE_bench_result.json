@@ -1,0 +1,16 @@
+{
+  "_comment": "FAKE TEST FIXTURE. Invented values used only to test bench/make_table.py. Not a measurement.",
+  "schema": 1,
+  "created_utc": "2000-01-01T00:00:00Z",
+  "dry_run": false,
+  "git_commit": null,
+  "gpu": {"name": "FAKE-GPU-FOR-TESTS", "device_index": 0, "device_count": 1, "driver": "0.0", "compute_capability": "0.0"},
+  "software": {"torch": "0.0", "cuda_core": "0.0"},
+  "config": {"reps": 1, "warmup": 0, "seed": 0, "dtype": "float32", "fma": false},
+  "results": [
+    {"impl": "cpu", "custom_kernel": false, "scenarios": 1, "locations": 2, "days": 3, "cells": 6,
+     "stages_ms": {"compute": 1.0, "end_to_end": 1.0}, "matches_cpu": true},
+    {"impl": "gpu_cuda", "custom_kernel": true, "scenarios": 1, "locations": 2, "days": 3, "cells": 6,
+     "stages_ms": {"h2d": 2.0, "layout_prep": 3.0, "compute": 4.0, "d2h": 5.0, "end_to_end": 6.0}, "matches_cpu": false}
+  ]
+}
