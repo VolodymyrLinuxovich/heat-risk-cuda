@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 from oracle import longest_run_scalar
 
-from heat_risk import cpu, gpu_cuda, gpu_torch
+from heat_risk import cpu, cpu_cpp, gpu_cuda, gpu_torch
 from heat_risk.spec import HAZARDS, HOT_NIGHT_C, HazardResult
 from heat_risk.synthetic import avoid_threshold_band, generate
 from heat_risk.thresholds import percentile_thresholds
@@ -21,6 +21,8 @@ Evaluate = Callable[..., HazardResult]
 
 IMPLS = [
     pytest.param(cpu.evaluate, id="cpu"),
+    pytest.param(cpu_cpp.evaluate, id="cpu_cpp"),
+    pytest.param(lambda *a: cpu_cpp.evaluate(*a, n_threads=1), id="cpu_cpp[1 thread]"),
     pytest.param(lambda *a: gpu_torch.evaluate(*a, device="cpu"), id="gpu_torch[cpu]"),
     pytest.param(
         lambda *a: gpu_torch.evaluate(*a, device="cuda:0"),
