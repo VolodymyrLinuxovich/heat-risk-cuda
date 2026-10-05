@@ -23,6 +23,22 @@ jobs:
       - run: mypy src bench
       - run: pytest -m "not gpu" -rs
 
+  native:
+    # Builds the C++ CPU implementation with CMake and runs its native unit tests, under GCC and
+    # Clang, with warnings as errors.
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        cxx: [g++, clang++]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} -DCMAKE_CXX_FLAGS=-Werror
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
   nvrtc:
     # Compiles the CUDA kernel with NVRTC on a runner with no GPU. Fails (never skips) if
     # cuda.core cannot be imported here.

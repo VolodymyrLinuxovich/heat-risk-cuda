@@ -28,7 +28,7 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-heat_risk = ["kernels/*.cu"]
+heat_risk = ["kernels/*.cu", "native/*.hpp", "native/*.cpp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
