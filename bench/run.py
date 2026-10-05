@@ -1,4 +1,4 @@
-"""Benchmark cpu, gpu_torch and gpu_cuda on synthetic data.
+"""Benchmark cpu, cpu_cpp, gpu_torch and gpu_cuda on synthetic data.
 
 Usage on a CUDA machine (e.g. Kaggle T4x2):
     python -m bench.run --sizes 4x1000x365 16x4000x365 --reps 20
@@ -13,7 +13,8 @@ untimed runs:
     compute      the hazard evaluation itself
     d2h          device-to-host copy of counts and runs
     end_to_end   all of the above in one timed region
-GPU stages use CUDA events on the current stream; cpu uses time.perf_counter.
+GPU stages use CUDA events on the current stream; cpu and cpu_cpp (C++, all host threads) use
+time.perf_counter.
 
 Results are written only from a real GPU run that reports a device name. Nothing here invents
 or fills in numbers.
@@ -24,6 +25,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import platform
 import statistics
 import subprocess
@@ -38,7 +40,7 @@ from typing import Any
 import numpy as np
 import torch
 
-from heat_risk import cpu, gpu_cuda, gpu_torch
+from heat_risk import cpu, cpu_cpp, gpu_cuda, gpu_torch
 from heat_risk.synthetic import avoid_threshold_band, generate
 from heat_risk.thresholds import percentile_thresholds
 
@@ -89,14 +91,19 @@ def _median_stages(samples: list[dict[str, float]]) -> dict[str, float]:
 # --- one implementation, one size ---------------------------------------------------------
 
 
-def run_cpu(arrays: tuple[np.ndarray, ...], reps: int, warmup: int) -> tuple[dict[str, float], Any]:
+def run_cpu(
+    arrays: tuple[np.ndarray, ...],
+    reps: int,
+    warmup: int,
+    evaluate: Callable[..., Any] = cpu.evaluate,
+) -> tuple[dict[str, float], Any]:
     timer = Timer(None)
     for _ in range(warmup):
-        cpu.evaluate(*arrays)
+        evaluate(*arrays)
     samples = []
     out = None
     for _ in range(reps):
-        ms, out = timer.time(lambda: cpu.evaluate(*arrays))
+        ms, out = timer.time(lambda: evaluate(*arrays))
         samples.append({"compute": ms, "end_to_end": ms})
     return _median_stages(samples), out
 
@@ -207,6 +214,8 @@ def software_info() -> dict[str, Any]:
     return {
         "python": platform.python_version(),
         "platform": platform.platform(),
+        "host_cpu_threads": os.cpu_count(),  # cpu_cpp uses all of them
+        "cxx": " ".join(cpu_cpp.compiler()),
         "numpy": np.__version__,
         "torch": torch.__version__,
         "torch_cuda": torch.version.cuda,
@@ -261,8 +270,9 @@ def benchmark(
         arrays = (data.tmax, data.tmin, data.rh, tx90, tx95)
         reference = cpu.evaluate(*arrays)
         for impl in impls:
-            if impl == "cpu":
-                stages, out = run_cpu(arrays, reps, warmup)
+            if impl in ("cpu", "cpu_cpp"):
+                fn = cpu.evaluate if impl == "cpu" else cpu_cpp.evaluate
+                stages, out = run_cpu(arrays, reps, warmup, fn)
                 got = (out.counts, out.longest_run)
             else:
                 dev = device if device is not None else torch.device("cpu")
@@ -332,7 +342,9 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--sizes", nargs="+", type=parse_size, default=None)
     p.add_argument(
-        "--impls", nargs="+", default=["cpu", "gpu_torch", "gpu_cuda", "gpu_cuda_tiled"]
+        "--impls",
+        nargs="+",
+        default=["cpu", "cpu_cpp", "gpu_torch", "gpu_cuda", "gpu_cuda_tiled"],
     )
     p.add_argument("--device", default="cuda:0")
     p.add_argument("--reps", type=int, default=20)

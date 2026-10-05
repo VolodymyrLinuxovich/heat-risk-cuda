@@ -1,14 +1,15 @@
 # Design
 
-## Three implementations
+## Four implementations
 
 | Name | Module | Custom kernel? |
 |---|---|---|
 | `cpu` | `heat_risk.cpu` | no: NumPy reference |
+| `cpu_cpp` | `heat_risk.cpu_cpp` + `native/heat_hazards.hpp` | no GPU: C++17 on host threads, loaded with ctypes |
 | `gpu_torch` | `heat_risk.gpu_torch` | no: library ops baseline, not a custom kernel |
 | `gpu_cuda` | `heat_risk.gpu_cuda` + `kernels/heat_hazards.cu` | yes: CUDA C++ compiled with NVRTC via NVIDIA `cuda.core` |
 
-All three take the same inputs (`[scenario, location, day]` arrays plus per-location thresholds
+All four take the same inputs (`[scenario, location, day]` arrays plus per-location thresholds
 from `heat_risk.thresholds`) and return the same int32 `[scenario, location, hazard]` counts and
 longest runs. The spec is docs/hazards.md.
 
@@ -50,6 +51,28 @@ last block return immediately (`row >= n_rows`). The parity tests cover such siz
 - Even so, exact bitwise agreement across platforms is not guaranteed: CI found PyTorch's CPU
   kernels 1 ulp off NumPy on Linux x86. Random-input parity tests therefore keep inputs away from
   every cutoff (`synthetic.avoid_threshold_band`). Exact-threshold tests use hand-picked values.
+
+## C++ CPU implementation
+
+`cpu_cpp` exists so GPU speedups can be read against a real compiled CPU baseline, not only
+against NumPy. It is the kernel's algorithm on the host: one pass per row over the days, with
+the same count, current run and best run per hazard (`RowState`), and a heat index function
+copied from the `.cu` file. Rows are split into contiguous chunks across `std::thread` workers.
+Rows are independent, so the thread count cannot change the result; small inputs stay on one
+thread because spawning costs more than it saves. Inputs are read in the original
+`[scenario, location, day]` layout, which is already sequential for a thread walking one row.
+
+It is compiled on first use with the host compiler (`$CXX`, else `c++`) using
+`-std=c++17 -O2 -ffp-contract=off -fno-fast-math`, and the shared library is cached next to
+the cubins under a key built from the sources, the flags and `c++ --version`. GCC contracts
+multiply-adds by default (`-ffp-contract=fast`), and so does Clang on arm64; turning that off is
+what makes float32 results match NumPy. `tests/test_cpu_cpp.py` checks this on random data
+without `avoid_threshold_band`, so values next to a cutoff must agree too.
+
+The same sources build with CMake (`CMakeLists.txt`), which also builds `native/tests`, a
+framework-free C++ test of the heat index (NWS chart values, NaN), runs with NaN breaks,
+inclusive per-location thresholds, zero days, and thread-count independence. CI runs it under
+GCC and Clang with `-Werror`.
 
 ## Compilation and caching
 

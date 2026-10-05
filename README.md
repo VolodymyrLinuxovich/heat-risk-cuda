@@ -4,18 +4,19 @@ An independent student project using NVIDIA's open-source CUDA Python tooling. N
 create, endorse, or sponsor it.
 
 It counts heat-hazard days (TX90, TX95, hot nights, heat index ≥ 32 °C) and their longest
-consecutive runs over arrays shaped `[scenario, location, day]`, and compares three
+consecutive runs over arrays shaped `[scenario, location, day]`, and compares four
 implementations of the same specification:
 
 | Name | What it is | Custom kernel? |
 |---|---|---|
 | `cpu` | NumPy reference implementation | no |
+| `cpu_cpp` | Multithreaded C++17 on the host (`std::thread`), compiled on first use, loaded with ctypes; also builds with CMake | no GPU kernel: a compiled CPU baseline |
 | `gpu_torch` | Ordinary PyTorch library ops | no: library ops baseline, not a custom kernel |
 | `gpu_cuda` | CUDA C++ kernels compiled at runtime with NVIDIA `cuda.core` (NVRTC); a shared-memory tiled kernel by default | yes |
 
 ## Status and honesty
 
-- All three implementations are written and tested. On a Kaggle Tesla T4 both custom kernels
+- All four implementations are written and tested. On a Kaggle Tesla T4 both custom kernels
   passed every GPU test (171 passed in the latest run) and were benchmarked; see the results
   below and STATUS.md.
 - The hazard definitions are in [docs/hazards.md](docs/hazards.md). They are project
@@ -30,15 +31,16 @@ implementations of the same specification:
 |---|---|
 | `cpu` matches hand-computed cases, NWS chart values and property tests | verified on CPU (macOS and Linux CI) |
 | `gpu_torch` matches `cpu` | verified on CPU tensors and on a Kaggle Tesla T4 |
+| `cpu_cpp` matches `cpu` bit for bit, any thread count | verified on macOS arm64 (Apple clang); native C++ tests in CI under GCC and Clang |
 | `gpu_cuda` kernel compiles for sm_75, float32 and float64, no `fma` in the PTX | verified in Linux CI with NVRTC, no GPU |
 | `gpu_cuda` produces correct results | verified on a Kaggle Tesla T4 for both kernels (tiled and day-major): all parity, tile-edge and edge-case tests pass, float32 and float64 |
 | Timings on a Tesla T4 | measured in two Kaggle sessions (10 reps each, float32); table below |
 
 Only what the table shows is claimed. Compute-only, layout prep, transfers and end-to-end time
 are reported separately, and a GPU result slower than `cpu` would be reported as data. Not
-measured: other GPUs, float64 timings, the second T4, and an optimised
-multi-threaded CPU baseline (`cpu` is a straightforward NumPy reference, so speedups against it
-overstate what a tuned CPU implementation would show).
+measured: other GPUs, float64 timings, the second T4, and `cpu_cpp` on the Kaggle host CPU.
+`cpu` is a straightforward NumPy reference, so speedups against it overstate what a compiled
+CPU implementation shows; see the `cpu_cpp` numbers below.
 
 ## How to reproduce on Kaggle
 
@@ -79,6 +81,25 @@ Two Kaggle T4 runs, read straight from the JSON files (the plot shows the latest
   close to what PCIe 3 can move, so further gains need the data to start on the GPU.
 - Against the PyTorch library ops baseline at 16×4000×365: compute 3.06 ms against 116.7 ms,
   end to end 26.5 ms against 140.3 ms (about 5.3×).
+
+### C++ CPU baseline (`cpu_cpp`), measured on a laptop, not on Kaggle
+
+Measured by hand on an Apple M5 (10 cores), macOS, float32, same synthetic data and
+`avoid_threshold_band`, median of 10 reps after 2 warmups. Results matched `cpu` exactly at
+every size where `cpu` was also run. These are not in the JSON files or the table below, which
+only hold Kaggle GPU runs, and they come from a different machine than the T4 numbers, so they
+are context, not a head-to-head result.
+
+| size (S×L×D) | `cpu_cpp`, 1 thread | `cpu_cpp`, 10 threads | `cpu` (NumPy) | T4 `gpu_cuda_tiled` compute / end to end |
+|---|---|---|---|---|
+| 1×1000×365 | 1.34 ms | 0.61 ms | | 0.55 / 0.93 ms |
+| 4×1000×365 | 5.85 ms | 1.51 ms | | 0.42 / 1.94 ms |
+| 16×4000×365 | 87.2 ms | 23.8 ms | 987 ms | 3.06 / 26.5 ms |
+| 32×16000×365 | 780 ms | 195 ms | | 22.8 / 208 ms |
+
+What this shows: the T4 kernel computes about 8× faster than 10 laptop threads, but once the
+data has to cross PCIe, end to end is roughly even. The GPU wins clearly only when the data
+already lives on the GPU, which matches the note above about generating it there.
 
 <!-- bench-table:start -->
 Generated from `bench/results/*.json` by `python -m bench.make_table`. Times are medians in milliseconds. A GPU result slower than `cpu` is reported as measured. No speedup is claimed beyond these measurements.

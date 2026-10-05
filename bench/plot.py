@@ -15,6 +15,7 @@ from bench.make_table import load_records
 
 STYLE = {
     "cpu": ("#4c72b0", "cpu"),
+    "cpu_cpp": ("#937860", "cpu_cpp (C++ threads)"),
     "gpu_torch": ("#dd8452", "gpu_torch"),
     "gpu_cuda": ("#8c8c8c", "gpu_cuda day-major + transpose"),
     "gpu_cuda_tiled": ("#55a868", "gpu_cuda tiled"),
@@ -46,7 +47,7 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     key=lambda r: r["cells"],
                 )
-                where = "host CPU" if impl == "cpu" else rec["gpu"]["name"]
+                where = "host CPU" if impl.startswith("cpu") else rec["gpu"]["name"]
                 if rows:
                     ax.plot(
                         [r["cells"] for r in rows],

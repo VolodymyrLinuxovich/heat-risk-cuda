@@ -56,9 +56,20 @@ matplotlib's dependencies, raised by the plot test, not from this project.
 After that run the tiled kernel became the default `layout`; both layouts stay covered by the
 GPU tests. `docs/img/timings.png` and the screenshots were regenerated from run version 3.
 
+## C++ CPU implementation (`cpu_cpp`, 2026-10-05)
+
+| Where | Command | Result |
+|---|---|---|
+| macOS arm64, Apple clang 21 | `pytest -m "not gpu"` | 206 passed, 4 skipped (nvrtc); includes `cpu_cpp` in every parity test, at all threads and 1 thread, and bit-for-bit parity with `cpu` on random data without `avoid_threshold_band` |
+| macOS arm64, CMake 4 | `ctest` | native C++ tests pass, no warnings with `-Wall -Wextra` |
+| Linux CI (GCC and Clang, `-Werror`) | `ctest` | new `native` job; see the CI run for this commit |
+
+Timed by hand on the Apple M5 (10 threads): 23.8 ms at 16×4000×365 and 195 ms at 32×16000×365.
+Those numbers are in the README, separate from the Kaggle JSON. Not yet run on Kaggle.
+
 ## Not measured
 
-Other GPUs, float64 timings, the second T4, and an optimised CPU baseline.
+Other GPUs, float64 timings, the second T4, and `cpu_cpp` on the Kaggle host CPU.
 
 ## Re-running on Kaggle (GPU T4 x2, Internet on)
 
