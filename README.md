@@ -20,8 +20,8 @@ implementations of the same specification:
   below and STATUS.md.
 - The hazard definitions are in [docs/hazards.md](docs/hazards.md). They are project
   simplifications, not ETCCDI indices.
-- **Nothing has been measured on a GPU yet.** No speedup is claimed until it is measured, and
-  any benchmark table in this README will be generated from JSON files written by real GPU runs.
+- **No speedup is claimed beyond what was measured.** The benchmark table in this README is
+  generated from JSON files written by real GPU runs.
 - All data is synthetic (seeded generator).
 
 ## What has and has not been measured
