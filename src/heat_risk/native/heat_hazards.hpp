@@ -95,6 +95,19 @@ void evaluate_rows(const T* tmax, const T* tmin, const T* rh, const T* tx90, con
     }
 }
 
+// Number of worker threads for n_rows > 0 rows. n_threads <= 0 means hardware_threads, which
+// may be 0 when the count is unknown; then one thread is used. Always at least 1.
+inline int64_t thread_count(int64_t n_rows, int64_t n_days, int n_threads,
+                            unsigned hardware_threads) {
+    if (n_threads <= 0) n_threads = static_cast<int>(hardware_threads);
+    if (n_threads <= 0) n_threads = 1;
+    // Below this many cells per thread, spawning costs more than it saves.
+    constexpr int64_t kMinCellsPerThread = 1 << 16;
+    const int64_t cells = n_rows * std::max<int64_t>(n_days, 1);
+    const int64_t useful = std::max<int64_t>(1, cells / kMinCellsPerThread);
+    return std::clamp<int64_t>(useful, 1, std::min<int64_t>(n_threads, n_rows));
+}
+
 // Splits rows into contiguous chunks, one per thread. n_threads <= 0 means
 // std::thread::hardware_concurrency(). Rows are independent, so the result does not depend on
 // the thread count.
@@ -103,12 +116,8 @@ void evaluate(const T* tmax, const T* tmin, const T* rh, const T* tx90, const T*
               int32_t* counts, int32_t* runs, int64_t n_rows, int64_t n_locations,
               int64_t n_days, T hot_night_c, T heat_index_cut_f, int n_threads) {
     if (n_rows <= 0) return;
-    if (n_threads <= 0) n_threads = static_cast<int>(std::thread::hardware_concurrency());
-    // Below this many cells per thread, spawning costs more than it saves.
-    constexpr int64_t kMinCellsPerThread = 1 << 16;
-    const int64_t cells = n_rows * std::max<int64_t>(n_days, 1);
-    const int64_t useful = std::max<int64_t>(1, cells / kMinCellsPerThread);
-    const int64_t n = std::clamp<int64_t>(useful, 1, std::min<int64_t>(n_threads, n_rows));
+    const int64_t n =
+        thread_count(n_rows, n_days, n_threads, std::thread::hardware_concurrency());
     if (n == 1) {
         evaluate_rows(tmax, tmin, rh, tx90, tx95, counts, runs, 0, n_rows, n_locations, n_days,
                       hot_night_c, heat_index_cut_f);
