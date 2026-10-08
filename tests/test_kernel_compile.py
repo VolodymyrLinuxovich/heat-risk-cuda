@@ -33,6 +33,47 @@ def test_unknown_layout_rejected() -> None:
         gpu_cuda.evaluate_tensors(z, z, z, z[0, 0], z[0, 0], layout="bogus")
 
 
+def _bad_inputs() -> list[tuple[str, type[Exception], tuple]]:  # type: ignore[type-arg]
+    import torch
+
+    x = torch.zeros((2, 3, 5))
+    t = torch.zeros(3)
+    return [
+        ("tx90 dtype", TypeError, (x, x, x, t.double(), t)),
+        ("tmin dtype", TypeError, (x, x.double(), x, t, t)),
+        ("float16", TypeError, (x.half(), x.half(), x.half(), t.half(), t.half())),
+        ("short tx95", ValueError, (x, x, x, t, t[:2])),
+        ("short rh", ValueError, (x, x, x[:, :, :4], t, t)),
+    ]
+
+
+@pytest.mark.parametrize("layout", gpu_cuda.LAYOUTS)
+@pytest.mark.parametrize("case", range(5))
+def test_tensor_inputs_checked_before_launch(layout: str, case: int) -> None:
+    # The kernel would read mixed dtypes as raw bytes and run past short buffers (issue #3).
+    _, exc, args = _bad_inputs()[case]
+    with pytest.raises(exc):
+        gpu_cuda.evaluate_tensors(*args, layout=layout)
+
+
+@pytest.mark.parametrize("case", range(5))
+def test_launch_functions_check_inputs(case: int) -> None:
+    _, exc, (tmax, tmin, rh, tx90, tx95) = _bad_inputs()[case]
+    with pytest.raises(exc):
+        gpu_cuda.launch_tiled(tmax, tmin, rh, tx90, tx95)
+    with pytest.raises(exc):
+        dm = [gpu_cuda.to_day_major(a) for a in (tmax, tmin, rh)]
+        gpu_cuda.launch_day_major(*dm, tx90, tx95, n_locations=3)
+
+
+def test_day_major_rows_must_match_locations() -> None:
+    import torch
+
+    dm = torch.zeros((5, 7))
+    with pytest.raises(ValueError):
+        gpu_cuda.launch_day_major(dm, dm, dm, torch.zeros(3), torch.zeros(3), n_locations=3)
+
+
 def test_cache_key_covers_source_options_and_nvrtc() -> None:
     o = gpu_cuda.CompileOptions()
     base = gpu_cuda.cache_key("src", o, "12.9")

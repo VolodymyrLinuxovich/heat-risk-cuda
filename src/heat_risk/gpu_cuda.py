@@ -136,6 +136,25 @@ def to_day_major(x: torch.Tensor) -> torch.Tensor:
     return x.reshape(s * n_loc, days).t().contiguous()
 
 
+def _check_tensors(
+    data: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+    thresholds: tuple[torch.Tensor, torch.Tensor],
+    n_locations: int,
+) -> None:
+    """Reject inputs the kernel would misread: mixed dtypes or mismatched shapes."""
+    dtype = data[0].dtype
+    if dtype not in KERNEL_NAMES:
+        raise TypeError(f"unsupported dtype {dtype}; use float32 or float64")
+    for name, t in zip(("tmin", "rh", "tx90", "tx95"), (*data[1:], *thresholds), strict=True):
+        if t.dtype != dtype:
+            raise TypeError(f"{name} has dtype {t.dtype}, expected {dtype}")
+    if data[1].shape != data[0].shape or data[2].shape != data[0].shape:
+        raise ValueError("tmax, tmin and rh must have the same shape")
+    for t in thresholds:
+        if t.shape != (n_locations,):
+            raise ValueError(f"thresholds must be shaped [location] = ({n_locations},)")
+
+
 def _launch(
     kernel_name: str,
     tmax: torch.Tensor,
@@ -200,7 +219,12 @@ def launch_day_major(
 
     Asynchronous on torch's current stream, like any torch op.
     """
+    if tmax_dm.ndim != 2:
+        raise ValueError("day-major inputs must be shaped [day, row]")
+    _check_tensors((tmax_dm, tmin_dm, rh_dm), (tx90, tx95), n_locations)
     days, n_rows = tmax_dm.shape
+    if n_locations <= 0 or n_rows % n_locations:
+        raise ValueError(f"{n_rows} rows is not a multiple of n_locations={n_locations}")
     name = KERNEL_NAMES[tmax_dm.dtype]
     return _launch(name, tmax_dm, tmin_dm, rh_dm, tx90, tx95, n_rows, n_locations, days, options)
 
@@ -219,7 +243,10 @@ def launch_tiled(
     """
     if BLOCK_SIZE != TILE_ROWS:
         raise RuntimeError("the tiled kernel needs BLOCK_SIZE == TILE_ROWS")
+    if tmax.ndim != 3:
+        raise ValueError("tmax must be shaped [scenario, location, day]")
     s, n_loc, days = tmax.shape
+    _check_tensors((tmax, tmin, rh), (tx90, tx95), n_loc)
     name = TILED_KERNEL_NAMES[tmax.dtype]
     return _launch(name, tmax, tmin, rh, tx90, tx95, s * n_loc, n_loc, days, options)
 
@@ -241,7 +268,10 @@ def evaluate_tensors(
     """
     if layout not in LAYOUTS:
         raise ValueError(f"layout must be one of {LAYOUTS}")
+    if tmax.ndim != 3:
+        raise ValueError("tmax must be shaped [scenario, location, day]")
     s, n_loc, _ = tmax.shape
+    _check_tensors((tmax, tmin, rh), (tx90, tx95), n_loc)
     if layout == "tiled":
         counts, runs = launch_tiled(
             tmax.contiguous(), tmin.contiguous(), rh.contiguous(),
