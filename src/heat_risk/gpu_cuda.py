@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import tempfile
 from dataclasses import dataclass, replace
 from functools import cache
 from importlib import resources
@@ -119,11 +120,27 @@ def _load_module(options: CompileOptions) -> Any:
     if path.exists():
         return ObjectCode.from_cubin(path.read_bytes())
     obj = compile_kernel(options, "cubin")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_bytes(bytes(obj.code))
-    tmp.replace(path)
+    write_atomic(path, bytes(obj.code))
     return obj
+
+
+def write_atomic(path: Path, data: bytes) -> None:
+    """Write ``data`` to ``path`` through a temp file unique to this writer, then rename.
+
+    Concurrent writers (for example one process per GPU on a cold cache) each get their own
+    temp file, so none of them can truncate or move another's file. The rename is atomic, so a
+    reader sees either no file or a complete one.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        tmp.replace(path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def device_arch(dev: torch.device) -> str:
