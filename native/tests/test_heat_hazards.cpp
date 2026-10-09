@@ -130,6 +130,18 @@ void test_thread_count_does_not_change_results() {
     }
 }
 
+void test_thread_count_unknown_hardware() {
+    // hardware_concurrency() may return 0. That must mean one thread, not zero (issue #4).
+    const int64_t big = int64_t(1) << 24;
+    CHECK(heat_risk::thread_count(1000, 365, 0, 0) == 1);
+    CHECK(heat_risk::thread_count(big, 365, 0, 0) == 1);
+    CHECK(heat_risk::thread_count(big, 365, -3, 0) == 1);
+    CHECK(heat_risk::thread_count(big, 365, 0, 8) == 8);
+    CHECK(heat_risk::thread_count(big, 365, 4, 0) == 4);
+    CHECK(heat_risk::thread_count(3, 1 << 20, 0, 8) == 3);
+    CHECK(heat_risk::thread_count(1, 1, 0, 8) == 1);
+}
+
 template <typename T>
 void run_all() {
     test_nws_chart<T>();
@@ -142,6 +154,7 @@ void run_all() {
 }  // namespace
 
 int main() {
+    test_thread_count_unknown_hardware();
     run_all<float>();
     run_all<double>();
     if (failures) {
