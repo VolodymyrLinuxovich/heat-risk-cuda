@@ -91,8 +91,25 @@ def test_tiled_is_the_default_layout() -> None:
         assert inspect.signature(fn).parameters["layout"].default == "tiled"
 
 
-def test_default_options_disable_fma() -> None:
-    assert gpu_cuda.DEFAULT_OPTIONS.fma is False and gpu_cuda.DEFAULT_OPTIONS.arch == "sm_75"
+def test_default_options_disable_fma_and_follow_the_device() -> None:
+    assert gpu_cuda.DEFAULT_OPTIONS.fma is False and gpu_cuda.DEFAULT_OPTIONS.arch is None
+
+
+@pytest.mark.parametrize(("cc", "arch"), [((7, 5), "sm_75"), ((8, 0), "sm_80"), ((8, 9), "sm_89")])
+def test_launch_arch_follows_device(monkeypatch, cc, arch) -> None:  # type: ignore[no-untyped-def]
+    # A cubin built for sm_75 does not load on an A100 or an L4 (issue #2).
+    import torch
+
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda dev=None: cc)
+    dev = torch.device("cuda", 0)
+    assert gpu_cuda.resolve_options(gpu_cuda.DEFAULT_OPTIONS, dev).arch == arch
+    fixed = replace(gpu_cuda.DEFAULT_OPTIONS, arch="sm_75")
+    assert gpu_cuda.resolve_options(fixed, dev) is fixed
+
+
+def test_compile_without_arch_rejected() -> None:
+    with pytest.raises(ValueError):
+        gpu_cuda.compile_kernel(gpu_cuda.DEFAULT_OPTIONS)
 
 
 def _nvrtc_flags(fma: bool) -> list[bytes]:
@@ -152,8 +169,9 @@ def test_fma_flag_reaches_nvrtc() -> None:
 
 
 @pytest.mark.nvrtc
-def test_compiles_to_cubin_for_sm75() -> None:
-    obj = gpu_cuda.compile_kernel(gpu_cuda.DEFAULT_OPTIONS, "cubin")
+@pytest.mark.parametrize("arch", ["sm_75", "sm_80", "sm_86", "sm_89", "sm_90"])
+def test_compiles_to_cubin(arch: str) -> None:
+    obj = gpu_cuda.compile_kernel(replace(gpu_cuda.DEFAULT_OPTIONS, arch=arch), "cubin")
     assert len(bytes(obj.code)) > 0
 
 

@@ -1,7 +1,8 @@
 """``gpu_cuda``: a custom CUDA C++ kernel compiled at runtime with NVIDIA cuda.core (NVRTC).
 
 The kernel source is ``kernels/heat_hazards.cu``. It is compiled once per (source, options,
-arch, NVRTC version) to a cubin for sm_75 (Tesla T4), cached on disk, and launched on torch
+arch, NVRTC version) to a cubin for the launch device's architecture (sm_75 on a Tesla T4),
+cached on disk, and launched on torch
 tensors via ``data_ptr()`` on torch's current CUDA stream. Two kernels exist: the default
 shared-memory tiled kernel reads the original layout; the day-major kernel needs a transpose.
 
@@ -14,7 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cache
 from importlib import resources
 from pathlib import Path
@@ -25,7 +26,6 @@ import torch
 
 from heat_risk.spec import HEAT_INDEX_F, HOT_NIGHT_C, N_HAZARDS, HazardResult, validate_inputs
 
-ARCH = "sm_75"
 BLOCK_SIZE = 128
 KERNEL_NAMES = {torch.float32: "heat_hazards_f32", torch.float64: "heat_hazards_f64"}
 TILED_KERNEL_NAMES = {
@@ -46,9 +46,13 @@ def kernel_source() -> str:
 
 @dataclass(frozen=True)
 class CompileOptions:
-    """Options that change the generated code. All of them are part of the cache key."""
+    """Options that change the generated code. All of them are part of the cache key.
 
-    arch: str = ARCH
+    ``arch=None`` means the architecture of the device the kernel is launched on. A cubin only
+    runs on GPUs with the same major compute capability, so a fixed arch breaks other GPUs.
+    """
+
+    arch: str | None = None
     fma: bool = False
     std: str = "c++17"
 
@@ -95,8 +99,10 @@ def cache_dir() -> Path:
 def compile_kernel(options: CompileOptions, target: str = "cubin") -> Any:
     """Compile the kernel source with NVRTC and return a cuda.core ``ObjectCode``.
 
-    Needs only the NVRTC library, not a GPU, when ``options.arch`` is given.
+    Needs only the NVRTC library, not a GPU. ``options.arch`` must be set.
     """
+    if options.arch is None:
+        raise ValueError("compile_kernel needs an explicit arch; launches resolve it per device")
     from cuda.core import Program
 
     prog = Program(kernel_source(), code_type="c++", options=options.to_program_options())
@@ -118,6 +124,17 @@ def _load_module(options: CompileOptions) -> Any:
     tmp.write_bytes(bytes(obj.code))
     tmp.replace(path)
     return obj
+
+
+def device_arch(dev: torch.device) -> str:
+    """``sm_XY`` for the compute capability X.Y of a CUDA device."""
+    major, minor = torch.cuda.get_device_capability(dev)
+    return f"sm_{major}{minor}"
+
+
+def resolve_options(options: CompileOptions, dev: torch.device) -> CompileOptions:
+    """Fill in the device's arch when ``options.arch`` is None."""
+    return options if options.arch is not None else replace(options, arch=device_arch(dev))
 
 
 class _TorchStream:
@@ -183,7 +200,7 @@ def _launch(
     device = Device(dev.index)
     device.set_current()
     stream = device.create_stream(_TorchStream(torch.cuda.current_stream(dev)))
-    kernel = _load_module(options).get_kernel(kernel_name)
+    kernel = _load_module(resolve_options(options, dev)).get_kernel(kernel_name)
     scalar = np.float32 if tmax.dtype == torch.float32 else np.float64
     config = LaunchConfig(grid=(n_rows + BLOCK_SIZE - 1) // BLOCK_SIZE, block=BLOCK_SIZE)
     launch(

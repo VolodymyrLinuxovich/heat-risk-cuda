@@ -76,8 +76,9 @@ GCC and Clang with `-Werror`.
 
 ## Compilation and caching
 
-The source is compiled once per process to a cubin for `sm_75` (Tesla T4, Kaggle's only free GPU
-type). Compiling to cubin rather than PTX means the driver never has to JIT-compile PTX produced by
+The source is compiled once per process and device architecture to a cubin for the GPU it
+launches on (`sm_75` on a Tesla T4, Kaggle's only free GPU type). A cubin only loads on GPUs with
+the same major compute capability, so the arch is read from the device rather than fixed. Compiling to cubin rather than PTX means the driver never has to JIT-compile PTX produced by
 an NVRTC newer than itself. The cubin is cached on disk (`~/.cache/heat_risk`, or
 `$HEAT_RISK_CACHE_DIR`) under a key built from the source, the compile options, and the NVRTC
 version. The two kernel entry points are plain `extern "C"` names (`heat_hazards_f32`,
