@@ -106,7 +106,8 @@ A Tesla T4 has 15 GB usable, so `gpu_torch` runs out of memory at that size whil
 kernel does not. The kernel keeps its per-hazard counters in registers; the library
 ops version materialises every intermediate as a full-size tensor. The benchmark records an
 out-of-memory result as `error` instead of crashing, so the table shows it. `batch.py` is the way
-to run `gpu_torch` on inputs this large.
+to run `gpu_torch` on inputs this large. Pass `bytes_per_cell=device_bytes_per_cell("gpu_torch",
+itemsize)` so each chunk is sized from the table above, not from the `gpu_cuda` footprint.
 
 ## Side note: where the end-to-end time went, and the fix
 
