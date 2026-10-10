@@ -37,6 +37,36 @@ def test_heat_index_close_on_cpu(dtype: type) -> None:
     np.testing.assert_array_max_ulp(got, want, maxulp=4)
 
 
+def _bad_inputs() -> list[tuple[type[Exception], tuple[torch.Tensor, ...]]]:
+    x = torch.zeros((2, 3, 5))
+    t = torch.zeros(3)
+    return [
+        (TypeError, (x, x, x, t.double(), t)),
+        (TypeError, (x, x.double(), x, t, t)),
+        (TypeError, (x.half(), x.half(), x.half(), t.half(), t.half())),
+        (ValueError, (x, x, x, t[:1], t[:1])),
+        (ValueError, (x, x, x, t, t[:2])),
+        (ValueError, (x, x[:, :1], x, t, t)),
+        (ValueError, (x[0], x[0], x[0], t, t)),
+    ]
+
+
+@pytest.mark.parametrize("case", range(7))
+def test_tensor_inputs_checked(case: int) -> None:
+    # Short thresholds used to broadcast and mixed dtypes used to promote (issue #12).
+    exc, args = _bad_inputs()[case]
+    with pytest.raises(exc):
+        gpu_torch.evaluate_tensors(*args)
+
+
+def test_float64_thresholds_with_float32_data_rejected() -> None:
+    # In float64, 30.3 is above float32(30.3), so this day would silently stop counting.
+    x = torch.full((1, 1, 1), 30.3, dtype=torch.float32)
+    thr = torch.tensor([30.3], dtype=torch.float64)
+    with pytest.raises(TypeError, match="tx90"):
+        gpu_torch.evaluate_tensors(x, x, x, thr, thr)
+
+
 def test_zero_days() -> None:
     z = np.zeros((2, 3, 0), dtype=np.float32)
     t = np.zeros(3, dtype=np.float32)
