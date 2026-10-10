@@ -59,7 +59,19 @@ def parse_size(text: str) -> tuple[int, int, int]:
     if len(parts) != 3:
         raise argparse.ArgumentTypeError(f"size must be SxLxD, got {text!r}")
     s, n_loc, days = (int(p) for p in parts)
+    if min(s, n_loc, days) < 0:
+        raise argparse.ArgumentTypeError(f"size must not be negative, got {text!r}")
     return s, n_loc, days
+
+
+def _int_at_least(minimum: int) -> Callable[[str], int]:
+    def parse(text: str) -> int:
+        value = int(text)
+        if value < minimum:
+            raise argparse.ArgumentTypeError(f"must be at least {minimum}, got {value}")
+        return value
+
+    return parse
 
 
 # --- timing -------------------------------------------------------------------------------
@@ -347,8 +359,8 @@ def main(argv: list[str] | None = None) -> int:
         default=["cpu", "cpu_cpp", "gpu_torch", "gpu_cuda", "gpu_cuda_tiled"],
     )
     p.add_argument("--device", default="cuda:0")
-    p.add_argument("--reps", type=int, default=20)
-    p.add_argument("--warmup", type=int, default=3)
+    p.add_argument("--reps", type=_int_at_least(1), default=20)  # medians need a sample
+    p.add_argument("--warmup", type=_int_at_least(0), default=3)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--dtype", choices=["float32", "float64"], default="float32")
     p.add_argument("--fma", action="store_true", help="allow fused multiply-add (labelled)")
