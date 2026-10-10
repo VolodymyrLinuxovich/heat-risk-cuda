@@ -22,9 +22,12 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 import torch
 
 from heat_risk.spec import HEAT_INDEX_F, HOT_NIGHT_C, N_HAZARDS, HazardResult, validate_inputs
+
+Array = npt.NDArray[np.floating]
 
 BLOCK_SIZE = 128
 KERNEL_NAMES = {torch.float32: "heat_hazards_f32", torch.float64: "heat_hazards_f64"}
@@ -308,11 +311,11 @@ def evaluate_tensors(
 
 
 def evaluate(
-    tmax: np.ndarray,
-    tmin: np.ndarray,
-    rh: np.ndarray,
-    tx90: np.ndarray,
-    tx95: np.ndarray,
+    tmax: Array,
+    tmin: Array,
+    rh: Array,
+    tx90: Array,
+    tx95: Array,
     device: str | torch.device = "cuda:0",
     layout: str = "tiled",
 ) -> HazardResult:

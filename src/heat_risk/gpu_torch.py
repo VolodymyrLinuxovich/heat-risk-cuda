@@ -9,9 +9,12 @@ is a separate PyTorch kernel launch; nothing here is a hand-written kernel. The 
 from __future__ import annotations
 
 import numpy as np
+import numpy.typing as npt
 import torch
 
 from heat_risk.spec import HEAT_INDEX_F, HOT_NIGHT_C, N_HAZARDS, HazardResult, validate_inputs
+
+Array = npt.NDArray[np.floating]
 
 
 def is_custom_kernel() -> bool:
@@ -82,11 +85,11 @@ def evaluate_tensors(
 
 
 def evaluate(
-    tmax: np.ndarray,
-    tmin: np.ndarray,
-    rh: np.ndarray,
-    tx90: np.ndarray,
-    tx95: np.ndarray,
+    tmax: Array,
+    tmin: Array,
+    rh: Array,
+    tx90: Array,
+    tx95: Array,
     device: str | torch.device = "cpu",
 ) -> HazardResult:
     """NumPy in, NumPy out convenience wrapper around ``evaluate_tensors``."""

@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 import torch
 
 from heat_risk import cpu, cpu_cpp, gpu_cuda, gpu_torch
@@ -48,6 +49,8 @@ SCHEMA_VERSION = 1
 RESULTS_DIR = Path(__file__).parent / "results"
 DEFAULT_SIZES = ["4x1000x365", "16x4000x365", "32x16000x365"]
 DRY_RUN_SIZES = ["2x50x30", "1x129x10"]
+
+Counts = npt.NDArray[np.int32]
 
 
 class ResultsRefused(RuntimeError):
@@ -92,7 +95,7 @@ def _median_stages(samples: list[dict[str, float]]) -> dict[str, float]:
 
 
 def run_cpu(
-    arrays: tuple[np.ndarray, ...],
+    arrays: tuple[npt.NDArray[np.floating], ...],
     reps: int,
     warmup: int,
     evaluate: Callable[..., Any] = cpu.evaluate,
@@ -110,7 +113,7 @@ def run_cpu(
 
 def run_device(
     impl: str,
-    arrays: tuple[np.ndarray, ...],
+    arrays: tuple[npt.NDArray[np.floating], ...],
     device: torch.device,
     reps: int,
     warmup: int,
@@ -138,10 +141,10 @@ def run_device(
             return None  # gpu_torch and gpu_cuda_tiled use the original layout
         return tuple(gpu_cuda.to_day_major(x) for x in d[:3])
 
-    def d2h(out: tuple[torch.Tensor, torch.Tensor]) -> tuple[np.ndarray, np.ndarray]:
+    def d2h(out: tuple[torch.Tensor, torch.Tensor]) -> tuple[Counts, Counts]:
         return out[0].cpu().numpy(), out[1].cpu().numpy()
 
-    def full() -> tuple[np.ndarray, np.ndarray]:
+    def full() -> tuple[Counts, Counts]:
         d = h2d()
         return d2h(compute(d, prep(d)))
 
