@@ -242,9 +242,20 @@ def write_results(record: dict[str, Any], out_dir: Path = RESULTS_DIR) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = record["created_utc"].replace(":", "").replace("-", "")
     slug = "".join(c if c.isalnum() else "-" for c in gpu["name"]).strip("-").lower()
-    path = out_dir / f"{stamp}_{slug}_dev{gpu['device_index']}.json"
-    path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
-    return path
+    base = f"{stamp}_{slug}_dev{gpu['device_index']}"
+    text = json.dumps(record, indent=2, sort_keys=True) + "\n"
+    # The stamp has one second resolution, so two runs can share a name. Mode "x" never
+    # replaces an existing file; a later run gets a numbered suffix instead.
+    n = 1
+    while True:
+        path = out_dir / (f"{base}.json" if n == 1 else f"{base}_{n}.json")
+        try:
+            with path.open("x") as f:
+                f.write(text)
+        except FileExistsError:
+            n += 1
+            continue
+        return path
 
 
 # --- main ---------------------------------------------------------------------------------
