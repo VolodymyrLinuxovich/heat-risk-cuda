@@ -44,6 +44,17 @@ def test_writes_when_gpu_named(tmp_path: Path) -> None:
     assert json.loads(path.read_text())["gpu"]["name"] == "Tesla T4"
 
 
+def test_same_second_runs_do_not_overwrite(tmp_path: Path) -> None:
+    # Both records get the same timestamp; the first one used to be replaced (issue #14).
+    first = run.write_results({**_record(), "results": [{"impl": "cpu"}]}, tmp_path)
+    second = run.write_results({**_record(), "results": [{"impl": "gpu_torch"}]}, tmp_path)
+    third = run.write_results({**_record(), "results": [{"impl": "gpu_cuda"}]}, tmp_path)
+    assert len({first, second, third}) == 3
+    assert second.name == first.stem + "_2.json"
+    impls = [json.loads(p.read_text())["results"][0]["impl"] for p in (first, second, third)]
+    assert impls == ["cpu", "gpu_torch", "gpu_cuda"]
+
+
 def test_dry_run_writes_nothing(capsys: pytest.CaptureFixture[str]) -> None:
     before = sorted(run.RESULTS_DIR.glob("*.json"))
     assert run.main(["--dry-run", "--reps", "2"]) == 0
