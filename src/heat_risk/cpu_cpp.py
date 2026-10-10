@@ -20,6 +20,7 @@ import tempfile
 from functools import cache
 from importlib import resources
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -124,6 +125,7 @@ def evaluate(
     if n_rows == 0:
         return HazardResult(counts=counts, longest_run=runs)
     ins = [np.ascontiguousarray(a) for a in (tmax, tmin, rh, tx90, tx95)]
+    scalar: type[np.floating[Any]]
     if dtype == np.float32:
         fn, scalar = _library().heat_hazards_cpp_f32, np.float32
     else:
