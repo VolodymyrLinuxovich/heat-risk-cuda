@@ -35,6 +35,14 @@ def test_empty_baseline_gives_nan() -> None:
     assert np.isnan(tx90).all() and np.isnan(tx95).all()
 
 
+@pytest.mark.parametrize("dtype", [np.float32, np.float64])
+@pytest.mark.parametrize("n_days", [0, 1, 10])
+def test_zero_locations_give_empty_thresholds(dtype: type, n_days: int) -> None:
+    tx90, tx95 = percentile_thresholds(np.empty((0, n_days)), dtype)
+    assert tx90.shape == (0,) and tx95.shape == (0,)
+    assert tx90.dtype == dtype and tx95.dtype == dtype
+
+
 def test_rejects_bad_shape_and_dtype() -> None:
     with pytest.raises(ValueError):
         percentile_thresholds(np.zeros(5), np.float64)

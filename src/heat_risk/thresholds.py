@@ -27,7 +27,9 @@ def percentile_thresholds(
     if base.ndim != 2:
         raise ValueError("baseline_tmax must be shaped [location, baseline_day]")
     n_loc, n_days = base.shape
-    if n_days == 0:
+    if n_loc == 0 or n_days == 0:
+        # np.nanpercentile drops the percentile axis when there are no locations, so the
+        # empty cases are handled here: no locations gives empty thresholds.
         nan = np.full(n_loc, np.nan, dtype=target)
         return nan, nan.copy()
     with warnings.catch_warnings():
