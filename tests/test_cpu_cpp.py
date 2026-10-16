@@ -34,6 +34,7 @@ def test_bitwise_parity_without_threshold_band(dtype: type, n_threads: int) -> N
     want = cpu.evaluate(*args)
     np.testing.assert_array_equal(got.counts, want.counts)
     np.testing.assert_array_equal(got.longest_run, want.longest_run)
+    assert got == want
 
 
 def test_non_contiguous_inputs() -> None:
