@@ -184,13 +184,13 @@ def _launch(
     days: int,
     options: CompileOptions,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    from cuda.core import Device, LaunchConfig, launch
-
     dev = tmax.device
     counts = torch.zeros((n_rows, N_HAZARDS), dtype=torch.int32, device=dev)
     runs = torch.zeros((n_rows, N_HAZARDS), dtype=torch.int32, device=dev)
     if n_rows == 0 or days == 0:
-        return counts, runs
+        return counts, runs  # nothing to launch, so cuda.core is not needed
+    from cuda.core import Device, LaunchConfig, launch
+
     for t in (tmax, tmin, rh, tx90, tx95):
         if not t.is_cuda or not t.is_contiguous() or t.device != dev:
             raise ValueError("all inputs must be contiguous CUDA tensors on one device")
@@ -240,7 +240,7 @@ def launch_day_major(
         raise ValueError("day-major inputs must be shaped [day, row]")
     _check_tensors((tmax_dm, tmin_dm, rh_dm), (tx90, tx95), n_locations)
     days, n_rows = tmax_dm.shape
-    if n_locations <= 0 or n_rows % n_locations:
+    if n_rows and (n_locations <= 0 or n_rows % n_locations):
         raise ValueError(f"{n_rows} rows is not a multiple of n_locations={n_locations}")
     name = KERNEL_NAMES[tmax_dm.dtype]
     return _launch(name, tmax_dm, tmin_dm, rh_dm, tx90, tx95, n_rows, n_locations, days, options)
