@@ -21,12 +21,24 @@ HEAT_INDEX_F = 89.6  # 32 °C expressed in °F; the heat index is compared in °
 SUPPORTED_DTYPES = (np.dtype(np.float32), np.dtype(np.float64))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class HazardResult:
-    """Per (scenario, location, hazard) outputs, hazards ordered as in ``HAZARDS``."""
+    """Per (scenario, location, hazard) outputs, hazards ordered as in ``HAZARDS``.
+
+    ``==`` compares shapes and values of both arrays. The arrays are mutable, so a result is not
+    hashable.
+    """
 
     counts: npt.NDArray[np.int32]
     longest_run: npt.NDArray[np.int32]
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, HazardResult):
+            return NotImplemented
+        return bool(
+            np.array_equal(self.counts, other.counts)
+            and np.array_equal(self.longest_run, other.longest_run)
+        )
 
     def __post_init__(self) -> None:
         if self.counts.shape != self.longest_run.shape:
