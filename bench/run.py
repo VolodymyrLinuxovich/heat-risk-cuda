@@ -338,6 +338,17 @@ def benchmark(
     }
 
 
+def cuda_device(text: str) -> torch.device | None:
+    """Parse ``--device``; None unless it names a CUDA device that is visible here."""
+    try:
+        device = torch.device(text)
+    except RuntimeError:
+        return None
+    if device.type != "cuda" or (device.index or 0) >= torch.cuda.device_count():
+        return None
+    return device
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--sizes", nargs="+", type=parse_size, default=None)
@@ -365,7 +376,14 @@ def main(argv: list[str] | None = None) -> int:
         if not torch.cuda.is_available():
             print("No CUDA device. Use --dry-run for a CPU smoke test.", file=sys.stderr)
             return 2
-        device = torch.device(a.device)
+        device = cuda_device(a.device)
+        if device is None:
+            print(
+                f"--device {a.device!r} is not one of the {torch.cuda.device_count()} visible "
+                "CUDA devices. Use --dry-run for a CPU smoke test.",
+                file=sys.stderr,
+            )
+            return 2
         torch.cuda.set_device(device)
         sizes = a.sizes or [parse_size(x) for x in DEFAULT_SIZES]
         impls, reps, warmup = a.impls, a.reps, a.warmup
