@@ -144,3 +144,18 @@ def test_plot_skips_error_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(plot, "load_records", lambda: [rec])
     out = tmp_path / "p.png"
     assert plot.main(["--out", str(out)]) == 0 and out.exists()
+
+
+def test_unknown_impl_rejected_before_any_run(capsys: pytest.CaptureFixture[str]) -> None:
+    # "gpu-torch" used to crash with a TypeError after cpu had already been timed.
+    with pytest.raises(SystemExit) as exc:
+        run.main(["--dry-run", "--impls", "cpu", "gpu-torch"])
+    assert exc.value.code == 2
+    assert "matches_cpu" not in capsys.readouterr().out
+
+
+def test_benchmark_rejects_unknown_impl() -> None:
+    import numpy as np
+
+    with pytest.raises(ValueError, match="gpu-torch"):
+        run.benchmark([(1, 4, 4)], ["cpu", "gpu-torch"], None, 1, 0, 0, np.float32, False, True)

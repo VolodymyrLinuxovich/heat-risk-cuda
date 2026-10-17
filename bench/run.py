@@ -48,6 +48,7 @@ SCHEMA_VERSION = 1
 RESULTS_DIR = Path(__file__).parent / "results"
 DEFAULT_SIZES = ["4x1000x365", "16x4000x365", "32x16000x365"]
 DRY_RUN_SIZES = ["2x50x30", "1x129x10"]
+IMPLS = ("cpu", "cpu_cpp", "gpu_torch", "gpu_cuda", "gpu_cuda_tiled")
 
 
 class ResultsRefused(RuntimeError):
@@ -261,6 +262,10 @@ def benchmark(
     fma: bool,
     dry_run: bool,
 ) -> dict[str, Any]:
+    unknown = sorted(set(impls) - set(IMPLS))
+    if unknown:
+        # Checked before any timing, so a typo cannot throw away a long run.
+        raise ValueError(f"unknown implementations {unknown}; choose from {list(IMPLS)}")
     options = gpu_cuda.CompileOptions(fma=fma)
     results = []
     for s, n_loc, days in sizes:
@@ -341,11 +346,7 @@ def benchmark(
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--sizes", nargs="+", type=parse_size, default=None)
-    p.add_argument(
-        "--impls",
-        nargs="+",
-        default=["cpu", "cpu_cpp", "gpu_torch", "gpu_cuda", "gpu_cuda_tiled"],
-    )
+    p.add_argument("--impls", nargs="+", choices=IMPLS, default=list(IMPLS))
     p.add_argument("--device", default="cuda:0")
     p.add_argument("--reps", type=int, default=20)
     p.add_argument("--warmup", type=int, default=3)
