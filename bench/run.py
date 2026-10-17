@@ -91,6 +91,17 @@ def _median_stages(samples: list[dict[str, float]]) -> dict[str, float]:
 # --- one implementation, one size ---------------------------------------------------------
 
 
+def compile_ahead(impl: str, device: torch.device | None, options: gpu_cuda.CompileOptions) -> None:
+    """Build the C++ library or the CUDA cubin now, so no timed run pays for compiling.
+
+    Both are compiled on first use. With ``--warmup 0`` that first use would be a timed run.
+    """
+    if impl == "cpu_cpp":
+        cpu_cpp.build_library()
+    elif impl.startswith("gpu_cuda") and device is not None and device.type == "cuda":
+        gpu_cuda._load_module(gpu_cuda.resolve_options(options, device))
+
+
 def run_cpu(
     arrays: tuple[np.ndarray, ...],
     reps: int,
@@ -270,6 +281,7 @@ def benchmark(
         arrays = (data.tmax, data.tmin, data.rh, tx90, tx95)
         reference = cpu.evaluate(*arrays)
         for impl in impls:
+            compile_ahead(impl, device, options)
             if impl in ("cpu", "cpu_cpp"):
                 fn = cpu.evaluate if impl == "cpu" else cpu_cpp.evaluate
                 stages, out = run_cpu(arrays, reps, warmup, fn)
