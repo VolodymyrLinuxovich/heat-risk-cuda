@@ -42,7 +42,13 @@ def _source_dir() -> Path:
 
 
 def _compiler_version(cxx: list[str]) -> str:
-    out = subprocess.run([*cxx, "--version"], capture_output=True, text=True, check=True)
+    try:
+        out = subprocess.run([*cxx, "--version"], capture_output=True, text=True, check=True)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise RuntimeError(
+            f"no usable C++ compiler: {shlex.join(cxx)} --version failed ({exc}). "
+            "Install a C++17 compiler or set CXX to one."
+        ) from exc
     return out.stdout
 
 
