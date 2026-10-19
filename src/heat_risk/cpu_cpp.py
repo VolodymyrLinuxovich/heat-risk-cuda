@@ -70,7 +70,9 @@ def build_library() -> Path:
     """Compile the shared library unless a cached one with the same key exists."""
     cxx = compiler()
     suffix = ".dylib" if sys.platform == "darwin" else ".so"
-    path = cache_dir() / f"heat_hazards_cpp-{cache_key(cxx)}{suffix}"
+    # Absolute, because ctypes passes a bare file name to dlopen, which on Linux searches only
+    # the system library path and never the working directory.
+    path = cache_dir().absolute() / f"heat_hazards_cpp-{cache_key(cxx)}{suffix}"
     if path.exists():
         return path
     path.parent.mkdir(parents=True, exist_ok=True)

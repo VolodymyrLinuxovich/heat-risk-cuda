@@ -16,6 +16,7 @@ def test_relative_cache_dir(tmp_path, monkeypatch, cache) -> None:  # type: igno
     monkeypatch.setenv("HEAT_RISK_CACHE_DIR", cache)
     cpu_cpp._library.cache_clear()
     try:
+        assert cpu_cpp.build_library().is_absolute()
         a = np.full((1, 1, 3), 30.0)
         t = np.zeros(1)
         r = cpu_cpp.evaluate(a, a, a, t, t)
