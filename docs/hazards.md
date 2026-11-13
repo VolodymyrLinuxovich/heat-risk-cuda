@@ -1,7 +1,7 @@
 # Hazard specification
 
-This file is the single definition that all three implementations (`cpu`, `gpu_torch`,
-`gpu_cuda`) follow. Tests check them against it.
+This file is the single definition that all four implementations (`cpu`, `cpu_cpp`,
+`gpu_torch`, `gpu_cuda`) follow. Tests check them against it.
 
 ## These are project simplifications, not ETCCDI indices
 
@@ -66,7 +66,7 @@ With `T` in °F (`T = tmax * 9/5 + 32`) and `RH` in percent:
    - If `RH > 85` and `80 <= T <= 87`, add `((RH - 85) / 10) * ((87 - T) / 5)`.
 
 The result stays in °F and is compared with 89.6, so every implementation compares the same
-quantity. The operations are evaluated in the same order in all three implementations.
+quantity. The operations are evaluated in the same order in all four implementations.
 
 ## NaN policy
 
