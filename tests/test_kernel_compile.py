@@ -84,6 +84,31 @@ def test_cache_key_covers_source_options_and_nvrtc() -> None:
     assert base != gpu_cuda.cache_key("src", o, "12.8")
 
 
+def test_concurrent_cache_writes_do_not_collide(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    # A fixed temp name let one writer move or truncate another's file (issue #8).
+    import threading
+
+    path = tmp_path / "cache" / "heat_hazards-sm_75-key.cubin"
+    payloads = [bytes([i]) * (1 << 20) for i in range(8)]
+    errors: list[BaseException] = []
+
+    def write(data: bytes) -> None:
+        try:
+            gpu_cuda.write_atomic(path, data)
+        except BaseException as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    for _ in range(10):
+        threads = [threading.Thread(target=write, args=(p,)) for p in payloads]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert path.read_bytes() in payloads
+    assert errors == []
+    assert [p.name for p in path.parent.iterdir()] == [path.name]
+
+
 def test_tiled_is_the_default_layout() -> None:
     import inspect
 
