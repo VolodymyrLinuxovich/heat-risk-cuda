@@ -52,6 +52,36 @@ def heat_index_f(tmax_c: torch.Tensor, rh: torch.Tensor) -> torch.Tensor:
     return torch.where(use_full, full, simple)
 
 
+SUPPORTED_DTYPES = (torch.float32, torch.float64)
+
+
+def _check_tensors(
+    tmax: torch.Tensor,
+    tmin: torch.Tensor,
+    rh: torch.Tensor,
+    tx90: torch.Tensor,
+    tx95: torch.Tensor,
+) -> None:
+    """Apply the dtype and shape rules of ``validate_inputs`` to tensors.
+
+    Without this, thresholds shaped (1,) broadcast over every location, and float64 thresholds
+    with float32 data compare in float64. Both give wrong counts with no error.
+    """
+    if tmax.ndim != 3:
+        raise ValueError("tmax must be shaped [scenario, location, day]")
+    if tmin.shape != tmax.shape or rh.shape != tmax.shape:
+        raise ValueError("tmax, tmin and rh must have the same shape")
+    dtype = tmax.dtype
+    if dtype not in SUPPORTED_DTYPES:
+        raise TypeError(f"unsupported dtype {dtype}; use float32 or float64")
+    for name, t in (("tmin", tmin), ("rh", rh), ("tx90", tx90), ("tx95", tx95)):
+        if t.dtype != dtype:
+            raise TypeError(f"{name} has dtype {t.dtype}, expected {dtype}")
+    n_loc = tmax.shape[1]
+    if tx90.shape != (n_loc,) or tx95.shape != (n_loc,):
+        raise ValueError(f"thresholds must be shaped [location] = ({n_loc},)")
+
+
 def evaluate_tensors(
     tmax: torch.Tensor,
     tmin: torch.Tensor,
@@ -61,6 +91,7 @@ def evaluate_tensors(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Return ``(counts, longest_run)`` as int32 tensors [scenario, location, hazard] on the
     input device. Inputs follow the same layout and dtype rules as ``cpu.evaluate``."""
+    _check_tensors(tmax, tmin, rh, tx90, tx95)
     s, n_loc, days = tmax.shape
     if days == 0:
         z = torch.zeros((s, n_loc, N_HAZARDS), dtype=torch.int32, device=tmax.device)
