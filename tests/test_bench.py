@@ -82,6 +82,20 @@ def test_parse_size() -> None:
     assert run.parse_size("4x1000x365") == (4, 1000, 365)
     with pytest.raises(argparse.ArgumentTypeError):
         run.parse_size("4x1000")
+    assert run.parse_size("0x10x10") == (0, 10, 10)
+    with pytest.raises(argparse.ArgumentTypeError):
+        run.parse_size("2x-5x10")
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [["--reps", "0"], ["--reps", "-1"], ["--warmup", "-1"], ["--sizes", "2x-5x10"]],
+)
+def test_bad_arguments_rejected_by_argparse(argv: list[str]) -> None:
+    # --reps 0 used to end in an IndexError when taking the median (issue #13).
+    with pytest.raises(SystemExit) as exc:
+        run.main(["--dry-run", *argv])
+    assert exc.value.code == 2
 
 
 def test_table_reads_only_results_dir() -> None:
