@@ -74,6 +74,21 @@ def test_day_major_rows_must_match_locations() -> None:
         gpu_cuda.launch_day_major(dm, dm, dm, torch.zeros(3), torch.zeros(3), n_locations=3)
 
 
+@pytest.mark.parametrize("layout", gpu_cuda.LAYOUTS)
+@pytest.mark.parametrize("shape", [(2, 0, 5), (0, 3, 5), (2, 3, 0), (0, 0, 0)])
+def test_empty_inputs_need_no_launch(layout: str, shape: tuple[int, int, int]) -> None:
+    # day_major rejected zero locations, and both layouts imported cuda.core with nothing to
+    # launch (issue #22). CPU tensors work here because no kernel runs.
+    import torch
+
+    x = torch.zeros(shape)
+    t = torch.zeros(shape[1])
+    counts, runs = gpu_cuda.evaluate_tensors(x, x, x, t, t, layout=layout)
+    assert counts.shape == runs.shape == (*shape[:2], 4)
+    assert counts.dtype == runs.dtype == torch.int32
+    assert not counts.any() and not runs.any()
+
+
 def test_cache_key_covers_source_options_and_nvrtc() -> None:
     o = gpu_cuda.CompileOptions()
     base = gpu_cuda.cache_key("src", o, "12.9")

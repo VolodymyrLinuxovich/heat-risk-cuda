@@ -76,11 +76,13 @@ def test_float32_matches_float64_reference_away_from_cutoffs(impl: Evaluate) -> 
 
 @pytest.mark.parametrize("impl", IMPLS)
 @pytest.mark.parametrize("dtype", DTYPES)
-def test_zero_days(impl: Evaluate, dtype: type) -> None:
-    z = np.zeros((2, 3, 0), dtype=dtype)
-    t = np.zeros(3, dtype=dtype)
+@pytest.mark.parametrize("shape", [(2, 3, 0), (2, 0, 5), (0, 3, 5), (0, 0, 0)])
+def test_empty_inputs(impl: Evaluate, dtype: type, shape: tuple[int, int, int]) -> None:
+    # Zero locations used to raise in the day_major layout only (issue #22).
+    z = np.zeros(shape, dtype=dtype)
+    t = np.zeros(shape[1], dtype=dtype)
     r = impl(z, z, z, t, t)
-    assert r.counts.shape == (2, 3, len(HAZARDS))
+    assert r.counts.shape == (*shape[:2], len(HAZARDS))
     assert not r.counts.any() and not r.longest_run.any()
 
 
